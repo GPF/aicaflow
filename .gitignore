@@ -16,10 +16,6 @@ cdrom/
 
 # Locally retained source media and research; keep large assets out of Git.
 sources/*
-!sources/legacy/
-sources/legacy/*
-!sources/legacy/README.md
-!sources/legacy/migration-manifest.json
 
 # Local source packs, project files and hardware evidence are not release data.
 Daytona_USA_(Sega_Model_2)/

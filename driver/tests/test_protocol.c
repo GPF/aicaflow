@@ -57,8 +57,15 @@ static void test_bytecode(void) {
     assert(afx_encode_event(bytes, sizeof(bytes), &event, NULL, &written) == AFX_BAD_COMMAND);
 }
 
+static void test_control_id(void) {
+    static const uint8_t image[] = {'a'};
+    assert(afx_control_id(NULL, 1) == 0);
+    assert(afx_control_id(image, sizeof(image)) == 0xe40c292cu);
+}
+
 int main(void) {
     test_bank_bound_container();
     test_bytecode();
+    test_control_id();
     puts("bank-bound protocol checks passed");
 }

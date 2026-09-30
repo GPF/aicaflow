@@ -7,10 +7,11 @@ This enDjinn player builds and plays three complete classical works:
 - Edvard Grieg — *In the Hall of the Mountain King*, Op. 46 No. 4.
 
 Each public-domain score is compiled to its own AFB, then to a small
-bank-bound AFX control flow with optional SH4-only AFC seek indexes and AFV
-spectrum sidecars. This makes PCM16 affordable for all three works while only
-one bank is resident at a time. Bach uses `room_warm`, Grieg uses `room`, and
-Chopin deliberately remains dry. Those choices and the DSP-send amount live
+bank-bound AFX control flow with optional SH4-only AFC seek indexes, AFV
+spectrum sidecars, and both compact and named AFI SH4 sample catalogs. This
+makes PCM16 affordable for all three works while only one bank is resident at a
+time. Bach uses `room_warm`, Grieg uses `room`, and Chopin deliberately remains
+dry. Those choices and the DSP-send amount live
 in their respective tracked `.afp` profiles; the `.afbm` stays concerned only
 with sample selection and coding. Source MIDI and
 the SoundFont are not versioned in this repository. Fetch the pinned sources
@@ -33,7 +34,7 @@ make -C examples/music_player SOUNDFONT=/path/to/your.sf2
 
 The POSIX-shell downloader verifies SHA-256 for every input. The native C
 authoring tool resolves MIDI program/bank changes through the selected SF2,
-expands its layered regions offline, and writes AFB/AFX/AFC/AFV without Python.
+expands its layered regions offline, and writes AFB/AFX/AFC/AFV/AFI without Python.
 [`classical.afbm`](classical.afbm) is the editable bank map; it selects PCM16,
 PCM8 or ADPCM per declared MIDI-program mapping and can be extended with
 additional SoundFont sources. `profiles/*.afp` are generated from the pinned

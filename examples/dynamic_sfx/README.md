@@ -23,8 +23,9 @@ pitch as bars, plus the exact packed slide-pan value and whether its sequence is
 still playing.
 
 ```sh
-make sfx-demo
-make sfx-cdi
+source /opt/toolchains/dc/kos/environ.sh
+make -C examples/dynamic_sfx
+make -C examples/dynamic_sfx bin/aicaflow_dynamic_sfx.cdi
 ```
 
 The engine's `update_engine()` in [`code/main.c`](code/main.c) patches a running

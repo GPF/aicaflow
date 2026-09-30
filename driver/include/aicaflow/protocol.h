@@ -127,6 +127,12 @@ enum { AFX_LANE_GAIN, AFX_LANE_MUTE, AFX_LANE_PAN, AFX_LANE_DSP_SEND,
 #define AFX_SEEK_MAGIC 0x00434641u /* "AFC\\0" in little-endian byte order. */
 #define AFX_SEEK_VERSION 1u
 #define AFX_SEEK_HEADER_BYTES 32u
+/* AFI is an AFB sample catalog for SH4-side one-shots. It is never uploaded
+ * to AICA or interpreted by the ARM7. */
+#define AFX_INDEX_MAGIC 0x00494641u /* "AFI\\0" in little-endian byte order. */
+#define AFX_INDEX_VERSION 1u
+#define AFX_INDEX_HEADER_BYTES 32u
+enum { AFX_INDEX_RECORD_BYTES = 16u, AFX_INDEX_NAMED_RECORD_BYTES = 32u };
 enum { AFX_PCM16 = 0, AFX_PCM8 = 1, AFX_ADPCM = 2 };
 enum { AFX_CAP_BOOTSTRAP = 1, AFX_CAP_LIFECYCLE = 2, AFX_CAP_PLAYBACK = 4, AFX_CAP_DSP = 8 };
 

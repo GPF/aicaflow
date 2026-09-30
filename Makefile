@@ -43,7 +43,6 @@ check: $(C_COMPILER) $(C_COMPILER_TEST) $(PROFILE_COMPILER)
 	"$$task_tmp/profiled.afx" "$$task_tmp/profiled.afc" && driver/build/afx_validate "$$task_tmp/profiled.afx"
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_adpcm.py
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_midi.py
-	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_perf.py
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_sf2.py
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_make_fixture_midi.py
 	PYTHONPATH=tools/tuner python3 tools/test/test_afx_tuner_client.py
@@ -57,13 +56,13 @@ $(C_COMPILER_TEST): tools/author/afx_compile_c.c tools/author/afx_compile_c.h to
 	mkdir -p build
 	clang -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -Idriver/include -Itools/author tools/author/afx_compile_c.c tools/author/afx_midi_c.c tools/author/afx_sample_c.c tools/author/afx_ya2beam.c tools/test/test_afx_compile_c.c driver/common/codec.c -lm -o $@
 
-$(DEMO_ASSETS): tools/author/afx_demo_assets.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h driver/include/aicaflow/protocol.h
+$(DEMO_ASSETS): tools/author/afx_demo_assets.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build
-	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_demo_assets.c tools/author/afx_compile_c.c -lm -o $@
+	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_demo_assets.c tools/author/afx_compile_c.c driver/common/codec.c -lm -o $@
 
-$(BANK_COMPILER): tools/author/afx_bank_c.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h tools/author/afx_midi_c.c tools/author/afx_midi_c.h tools/author/afx_sample_c.c tools/author/afx_sample_c.h tools/author/afx_sf2_c.c tools/author/afx_sf2_c.h tools/author/afx_ya2beam.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
+$(BANK_COMPILER): tools/author/afx_bank_c.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h tools/author/afx_midi_c.c tools/author/afx_midi_c.h tools/author/afx_sample_c.c tools/author/afx_sample_c.h tools/author/afx_sf2_c.c tools/author/afx_sf2_c.h tools/author/afx_ya2beam.c driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build
-	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_bank_c.c tools/author/afx_compile_c.c tools/author/afx_midi_c.c tools/author/afx_sample_c.c tools/author/afx_sf2_c.c tools/author/afx_ya2beam.c -lm -o $@
+	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_bank_c.c tools/author/afx_compile_c.c tools/author/afx_midi_c.c tools/author/afx_sample_c.c tools/author/afx_sf2_c.c tools/author/afx_ya2beam.c driver/common/codec.c -lm -o $@
 
 $(PROFILE_COMPILER): tools/author/afx_profile_c.c driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build

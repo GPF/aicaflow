@@ -9,8 +9,11 @@ BASE_DIR := build/base
 ASSET_STAMP := $(ASSET_DIR)/.prepared
 PROFILES := $(addprefix profiles/,chopin-op28-no20.afp bach-bwv1007-prelude.afp grieg-mountain-king.afp)
 ASSETS := $(addprefix $(ASSET_DIR)/,chopin-op28-no20.afb chopin-op28-no20.afx chopin-op28-no20.afc chopin-op28-no20.afv \
+	chopin-op28-no20.afi chopin-op28-no20.names.afi \
 	bach-bwv1007-prelude.afb bach-bwv1007-prelude.afx bach-bwv1007-prelude.afc bach-bwv1007-prelude.afv \
-	grieg-mountain-king.afb grieg-mountain-king.afx grieg-mountain-king.afc grieg-mountain-king.afv)
+	bach-bwv1007-prelude.afi bach-bwv1007-prelude.names.afi \
+	grieg-mountain-king.afb grieg-mountain-king.afx grieg-mountain-king.afc grieg-mountain-king.afv \
+	grieg-mountain-king.afi grieg-mountain-king.names.afi)
 DISC := $(ENJ_ROMDIR)/$(ENJ_BASENAME)
 DISC_STAMP := $(DISC)/.assets
 FIRMWARE := $(DISC)/aicaflow.drv
@@ -37,12 +40,12 @@ $(AUTHOR) $(BANK_AUTHOR) $(PROFILE_AUTHOR): ../../tools/author/afx_compile_c.c .
 	../../tools/author/afx_bank_c.c ../../tools/author/afx_profile_c.c
 	$(MAKE) -C ../.. compiler
 
-$(ASSET_STAMP): classical.afbm $(PROFILES) $(SOURCES) $(SOUNDFONT) $(BANK_AUTHOR) $(PROFILE_AUTHOR) ../../tools/author/afx_sample_c.c ../../tools/author/afx_ya2beam.c
+$(ASSET_STAMP): Makefile classical.afbm $(PROFILES) $(SOURCES) $(SOUNDFONT) $(BANK_AUTHOR) $(PROFILE_AUTHOR) ../../tools/author/afx_sample_c.c ../../tools/author/afx_ya2beam.c
 	@mkdir -p $(ASSET_DIR) $(BASE_DIR) build/include
 	$(BANK_AUTHOR) --per-song classical.afbm "$(BASE_DIR)"
 	@set -e; for name in chopin-op28-no20 bach-bwv1007-prelude grieg-mountain-king; do \
 		$(PROFILE_AUTHOR) apply "$(BASE_DIR)/$$name.afx" "$(BASE_DIR)/$$name.afc" "profiles/$$name.afp" "$(ASSET_DIR)/$$name.afx" "$(ASSET_DIR)/$$name.afc"; \
-		cp "$(BASE_DIR)/$$name.afb" "$(BASE_DIR)/$$name.afv" "$(ASSET_DIR)/"; \
+		cp "$(BASE_DIR)/$$name.afb" "$(BASE_DIR)/$$name.afv" "$(BASE_DIR)/$$name.afi" "$(BASE_DIR)/$$name.names.afi" "$(ASSET_DIR)/"; \
 	done
 	@set -e; { \
 		printf '%s\n' 'static const struct song { const char *title, *file, *bank, *dsp; bool wraps; uint32_t bytes, sample_bytes, stream_bytes, setup_bytes, padding_bytes, command_baseline_bytes, note_count; uint16_t sample_count, setup_count; uint8_t channel_count; } songs[] = {'; \
@@ -83,7 +86,7 @@ $(ENJ_BINDIR)/$(ENJ_BASENAME).cdi: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf $(DISC_STAM
 
 check: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf $(DISC_STAMP) ../../driver/build/afx_validate
 	@for name in chopin-op28-no20 bach-bwv1007-prelude grieg-mountain-king; do \
-		for extension in afb afx afc afv; do test -s "$(ASSET_DIR)/$$name.$$extension"; done; \
+		for extension in afb afx afc afv afi names.afi; do test -s "$(ASSET_DIR)/$$name.$$extension"; done; \
 	done
 	@for flow in $(ASSET_DIR)/*.afx; do ../../driver/build/afx_validate "$$flow"; done
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; mkdir "$$task_tmp/out"; \

@@ -11,7 +11,6 @@ and bow presets useful to audition as well as the ordinary `MIXS0` effects.
 
 ```sh
 source /opt/toolchains/dc/kos/environ.sh
-source ../enDjinn/environ.sh
 make -C examples/dsp_effects_player
 ```
 

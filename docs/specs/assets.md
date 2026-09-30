@@ -20,7 +20,7 @@ the required bank-relative address and AICA register values.
 | `.afv` | Optional player visualisation frames | Player only |
 | `.afp` | Offline performance/DSP profile | Offline authoring tool |
 | `.afbm` | Editable source map for building a shared AFB | Offline bank builder |
-| `.afi` | Reserved optional offline sample-offset index | No release runtime consumer |
+| `.afi` | Optional binary AFB sample catalog | SH4-side one-shot code |
 
 All binary layouts are little-endian. Fixed headers make the files cheap to
 validate and intentionally leave no alternate container or compatibility
@@ -92,35 +92,49 @@ effect on audio playback or seeking.
 AFP is editable JSON and is bound to one base AFX by its AFX file version and a
 SHA-256 digest. It is an offline transform: it writes a derived AFX and matching
 AFC, never a profile interpreter on Dreamcast. Timing belongs to the source
-MIDI/control flow; AFP is for timbre, articulation and DSP treatment.
-
-The release schema starts like this:
+MIDI/control flow; AFP is for timbre, articulation and DSP routing.
 
 ```json
 {
   "format": "aicaflow.afp",
-  "version": 1,
-  "base": { "abi": 7, "canonical_sha256": "..." },
-  "dsp": { "preset": "room", "send": 112 },
+  "version": 2,
+  "base": { "afx_version": 7, "canonical_sha256": "..." },
+  "dsp": { "preset": "room_warm" },
+  "defaults": { "dsp_send": 128 },
   "templates": {
-    "all-notes": { "label": "All notes", "parameters": { "dsp_send": 112 } }
+    "cello": { "parameters": { "lfo": 19024 } },
+    "close": { "parameters": { "dsp_send": 0 } }
   },
-  "assignments": [
-    { "event": { "kind": "note", "tick": 0, "ordinal": 0, "channel": 0 }, "template": "all-notes" }
+  "setup_templates": { "0": "cello" },
+  "overrides": [
+    { "event": { "kind": "note", "tick": 750, "ordinal": 0, "channel": 0 },
+      "template": "close" }
   ]
 }
 ```
 
-`init` writes a complete note inventory so an editor has stable event identity.
-An ordinal is the zero-based position among note events at the same tick; it is
-not a timing offset. Today `afx_profile apply` applies the common DSP preset
-and send to the setup templates and rewrites AFX/AFC identities. It validates
-the whole profile binding but does not yet use individual assignments to make
-per-note setup copies. That extension remains an offline compiler task and
-must continue to emit ordinary AFX commands.
+The effective parameters for a note are resolved in this order:
 
-Supported preset names are `dry`, `room`, `room_warm` and `room_large`;
-`dry` requires send `0`, while a room preset requires a nonzero send.
+`base AFX setup → defaults → setup template → note template → note parameters`.
+
+An ordinal is the zero-based position among note events at the same tick; it is
+only an offline selector, never a timing offset. `build/afx_profile inventory
+song.afx` prints the available selectors and their source setups. `init` writes
+the compact empty form rather than hundreds of redundant all-note assignments.
+
+`dsp.preset` installs **one scene for the whole flow**. AICA cannot run a
+different DSP program for each note. `dsp_send`, however, is an ordinary AICA
+channel register: a global default can send every note to that scene, a template
+can change the send for a family of notes, and one override can make a selected
+note drier or wetter. The same precedence works for `env_ad`, `env_dr`, `lfo`,
+`direct`, `mix`, `filter_level0` through `filter_level4`, `filter_ad` and
+`filter_dr`. These are raw 16-bit AICA register words so the profile lowers to
+existing `NOTE` and `PATCH` commands; later source patches cannot overwrite a
+profiled field while that note is active.
+
+Supported preset names are `dry`, `room`, `room_warm` and `room_large`. A dry
+preset with empty defaults is a useful byte-identical profile: applying it
+copies both AFX and AFC unchanged.
 
 ## AFBM — bank map
 
@@ -148,10 +162,37 @@ builder writes the shared `.afb` plus one `.afx`, `.afc` and `.afv` for each
 song. `--create-map` creates an editable starting AFBM from an SF2 and MIDI
 files.
 
-## AFI — reserved index
+## AFI — SH4 sample catalog
 
-AFI is reserved for an optional authoring/editor index: a bound AFB identity,
-sample count, and sample payload offsets, with optional names where source
-metadata provides them. It must never be required for playback, placed on
-ARM7, or used as another runtime bank format. No release tool emits or consumes
-AFI yet.
+AFI is the optional binary catalog that lets SH4-side code start AFB samples
+as direct one-shots without scanning an AFX setup dictionary. It is never
+uploaded to AICA or interpreted by ARM7. The bank builder emits two variants
+next to every AFB: `bank.afi` has compact records and `bank.names.afi` adds
+fixed-width source sample names. Both bind to exactly the same AFB.
+
+An AFI begins with a fixed, 32-byte little-endian header:
+
+| Offset | Size | Field |
+| ---: | ---: | --- |
+| 0 | 4 | magic `AFI\0` |
+| 4 | 4 | version (`1`) |
+| 8 | 8 | AFB identity: low then high word |
+| 16 | 4 | record offset (`32`) |
+| 20 | 4 | unique sample count |
+| 24 | 4 | record bytes (`16` or `32`) |
+| 28 | 4 | total file bytes, padded to 32 bytes |
+
+Each compact 16-byte record is little-endian:
+
+| Offset | Size | Field |
+| ---: | ---: | --- |
+| 0 | 4 | sample **file offset** in the AFB |
+| 4 | 4 | effective sample rate in Hz |
+| 8 | 4 | decoded sample length in frames |
+| 12 | 1 | AICA format (`0` PCM16, `1` PCM8, `2` ADPCM) |
+| 13 | 3 | reserved, zero |
+
+The 32-byte named record appends a zero-padded, fixed 16-byte source sample
+name at offset 16. Duplicate AFX setups that refer to the same AFB sample
+produce one AFI record. AFI currently describes direct one-shots: loop points,
+root-key and tuning deliberately remain AFX setup data.

@@ -6,7 +6,7 @@ ENJ_LDLIBS += ../../driver/sh4/libaicaflow_host.a
 
 AUTHOR_DEMOS := ../../build/afx_demo_assets
 
-$(AUTHOR_DEMOS): ../../tools/author/afx_demo_assets.c ../../tools/author/afx_compile_c.c ../../tools/author/afx_compile_c.h
+$(AUTHOR_DEMOS): ../../tools/author/afx_demo_assets.c ../../tools/author/afx_compile_c.c ../../tools/author/afx_compile_c.h ../../driver/common/codec.c ../../driver/include/aicaflow/codec.h
 	$(MAKE) -C ../.. compiler
 
 $(ENJ_BUILDDIR)/demo.afb $(ENJ_BUILDDIR)/demo.afx &: $(AUTHOR_DEMOS)

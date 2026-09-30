@@ -30,10 +30,12 @@ fetch GeneralUser.sf2 https://raw.githubusercontent.com/ad-si/GeneralUser/master
 
 bach_zip=$dest/bach-bwv1007.zip
 bach=$dest/bach-bwv1007-prelude.mid
-bach_sha=59449437fd1455537d3fd9d8963eac4a9f2d413f0d446b39539edbc7090fe619
+bach_sha=c55a2eae5e8d2e7a9570fe7ec8325c8825656893249878b946e6a2ead288a272
 if [ ! -f "$bach" ] || [ "$(digest "$bach")" != "$bach_sha" ]; then
     curl -fL --retry 3 -o "$bach_zip" https://www.mutopiaproject.org/ftp/BachJS/BWV1007/bwv1007/bwv1007-mids.zip
-    unzip -p "$bach_zip" bwv1007-1.mid > "$bach.part"
+    # The full 656-note cello score is the source of the preserved
+    # performance-timing work. `bwv1007-1.mid` is a shorter arrangement.
+    unzip -p "$bach_zip" bwv1007.mid > "$bach.part"
     actual=$(digest "$bach.part")
     [ "$actual" = "$bach_sha" ] || { printf 'bach-bwv1007-prelude.mid: expected %s, got %s\n' "$bach_sha" "$actual" >&2; exit 1; }
     mv "$bach.part" "$bach"

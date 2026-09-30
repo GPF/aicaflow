@@ -12,7 +12,7 @@ Build and load it once:
 ```sh
 source /opt/toolchains/dc/kos/environ.sh
 make tools
-dc-tool-ip -f -t "$DCTOOL_HOST:31313" \
+kos-tool -t "$DCTOOL_HOST" -f \
   -x tools/tuner/server/bin/afx_tuner_server.elf
 ```
 

@@ -6,7 +6,7 @@ containers or alternate runtime bank models.
 
 - [Runtime ABI](runtime.md) — firmware bootstrap, commands and ownership.
 - [Assets and sidecars](assets.md) — AFB, AFX, AFC, AFV, AFP, AFBM and the
-  reserved AFI index.
+  optional offline AFI index.
 - [AFX instruction language](instruction-language.md) — the exact timed
   bytecode in an AFX control stream.
 - [SH-4 ↔ ARM7 IPC](ipc.md) — queue records, command ownership and durable

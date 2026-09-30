@@ -1,6 +1,7 @@
 #include <kos.h>
 #include <kos/net.h>
 #include <dc/g2bus.h>
+#include <dc/sound/sound.h>
 #include <aicaflow/dsp.h>
 #include <aicaflow/host.h>
 #include <aicaflow/codec.h>
@@ -73,6 +74,10 @@ static void present(void) { enj_render_next_frame(&console_mode); }
 static int console_init(void) {
     enj_state_init_defaults();
     if (enj_state_startup()) return -1;
+    /* enDjinn starts KOS's sound interface for ordinary applications. The
+     * tuner replaces the ARM program, so release KOS's AICA ownership before
+     * afx_init installs the AICAflow firmware. */
+    snd_shutdown();
     enj_qfont_color_set(255, 255, 255);
     terminal_clear(&terminal);
     terminal_writeline_screen(&terminal, "Aicaflow persistent tuner");

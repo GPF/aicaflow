@@ -105,6 +105,7 @@ static int make_bank_flow(const afx_bank_t *bank, const uint16_t fields[AFX_FIEL
     for (uint32_t field = 0; field < AFX_FIELD_COUNT; ++field)
         afx_write16(file + 96 + field * 2u, fields[field]);
     memcpy(file + 96 + AFX_SETUP_BYTES, stream, stream_bytes);
+    afx_write32(file + 32, afx_control_id(file + 96, image_bytes));
     return afx_bank_flow_upload(bank, file, 96 + image_bytes, out_flow);
 }
 
