@@ -1,6 +1,6 @@
 {
   "format": "aicaflow.afp",
-  "version": 2,
+  "version": 3,
   "base": {
     "afx_version": 7,
     "canonical_sha256": "07c9231273de54b21514810381dac824b6e446409fdb8adda50a90fd92573f6b"

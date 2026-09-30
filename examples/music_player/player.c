@@ -60,7 +60,8 @@ static int selected, playing = -1, loaded = -1;
 static bool input_armed, room_cached, test_exit, paused;
 static uint8_t last_ltrigger, last_rtrigger;
 static uint32_t paused_ms;
-static uint32_t rate_num, rate_den, duration_ms, started;
+static uint32_t rate_num, rate_den, authored_duration_ms, duration_ms, started;
+static uint16_t tempo_q8_8 = 256;
 static char message[80] = "Select a song and press A";
 static uint8_t *visual_data, *visual;
 static uint32_t visual_frames;
@@ -104,7 +105,7 @@ static uint32_t playback_ms(void) {
 }
 static void spectrum(uint32_t ms) {
     if (!visual || !visual_frames) return;
-    uint32_t frame=(uint32_t)((uint64_t)ms*VISUAL_RATE/1000);
+    uint32_t frame=(uint32_t)((uint64_t)ms*tempo_q8_8*VISUAL_RATE/(256u*1000u));
     if (frame>=visual_frames) frame=visual_frames-1;
     if (frame!=spectrum_frame) {
         uint32_t elapsed=1;
@@ -234,7 +235,7 @@ static int bank_control_load(const char *name, afx_asset_t *out) {
         uint64_t ticks;
         result=afx_flow_duration(data,(uint32_t)length,&ticks,&rate_num,&rate_den);
         if (!result) {
-            duration_ms=(uint32_t)(ticks*1000u*rate_den/rate_num);
+            authored_duration_ms=(uint32_t)(ticks*1000u*rate_den/rate_num);
             result=afx_bank_flow_upload(&player_bank,data,(uint32_t)length,out);
         }
     }
@@ -417,6 +418,9 @@ static int room(const char *name) {
 static int start(void) {
     int index=loaded;
     int r=afx_instance_activate(asset,&instance);
+    tempo_q8_8=songs[index].tempo;
+    duration_ms=(uint32_t)((uint64_t)authored_duration_ms*256u/tempo_q8_8);
+    if (!r) r=afx_instance_tempo(instance,tempo_q8_8);
     if (!r) r=wait_state(AFX_RUNNING);
     if (!r) r=afx_instance_gain(instance,PLAYER_SONG_GAIN(index));
     started=afx_instance_start_tick(instance);
@@ -470,7 +474,7 @@ static int seek(int seconds) {
     if (paused) { paused_ms=(uint32_t)target; return 0; }
     int r=afx_instance_pause(instance);
     if (!r) r=wait_state(AFX_PAUSED);
-    if (!r) r=afx_instance_seek(instance,(uint32_t)((uint64_t)target*rate_num/(1000ull*rate_den)));
+    if (!r) r=afx_instance_seek(instance,(uint32_t)((uint64_t)target*tempo_q8_8*rate_num/(256000ull*rate_den)));
     if (!r) r=wait_state(AFX_RUNNING);
     if (!r) started=afx_status_timer_ticks()-(uint32_t)target;
     printf("PLAYER SEEK %lld result=%d\n",(long long)target,r);
@@ -492,7 +496,7 @@ static int toggle(void) {
     if (playing!=selected) return play(selected);
     int r;
     if (paused) {
-        r=afx_instance_seek(instance,(uint32_t)((uint64_t)paused_ms*rate_num/(1000ull*rate_den)));
+        r=afx_instance_seek(instance,(uint32_t)((uint64_t)paused_ms*tempo_q8_8*rate_num/(256000ull*rate_den)));
         if (!r) r=wait_state(AFX_RUNNING);
         if (!r) { started=afx_status_timer_ticks()-paused_ms; paused=false; }
     } else {

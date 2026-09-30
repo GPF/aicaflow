@@ -91,15 +91,17 @@ effect on audio playback or seeking.
 
 AFP is editable JSON and is bound to one base AFX by its AFX file version and a
 SHA-256 digest. It is an offline transform: it writes a derived AFX and matching
-AFC, never a profile interpreter on Dreamcast. Timing belongs to the source
-MIDI/control flow; AFP is for timbre, articulation and DSP routing.
+AFC, never a profile interpreter on Dreamcast. Note timing belongs to the source
+MIDI/control flow; AFP is for timbre, articulation, DSP routing and an optional
+whole-flow playback rate.
 
 ```json
 {
   "format": "aicaflow.afp",
-  "version": 2,
+  "version": 3,
   "base": { "afx_version": 7, "canonical_sha256": "..." },
   "dsp": { "preset": "room_warm" },
+  "tempo_q8_8": 220,
   "defaults": { "dsp_send": 128 },
   "templates": {
     "cello": { "parameters": { "lfo": 19024 } },
@@ -131,6 +133,12 @@ note drier or wetter. The same precedence works for `env_ad`, `env_dr`, `lfo`,
 `filter_dr`. These are raw 16-bit AICA register words so the profile lowers to
 existing `NOTE` and `PATCH` commands; later source patches cannot overwrite a
 profiled field while that note is active.
+
+`tempo_q8_8` is optional and applies to the whole flow: `256` is authored
+tempo, `128` is half speed and `512` is double speed. The SH4 sends that
+existing instance-tempo value when it activates the flow, so it changes neither
+the AFX command stream nor the individual NOTE/KEYOFF offsets. It is useful for
+choosing an overall performance pace, not for rhythmic humanisation.
 
 Supported preset names are `dry`, `room`, `room_warm` and `room_large`. A dry
 preset with empty defaults is a useful byte-identical profile: applying it

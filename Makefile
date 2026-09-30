@@ -38,7 +38,7 @@ check: $(C_COMPILER) $(C_COMPILER_TEST) $(PROFILE_COMPILER)
 	"$$task_tmp/fixture.afb" "$$task_tmp/fixture.afx" && \
 	./$(PROFILE_COMPILER) init "$$task_tmp/fixture.afx" "$$task_tmp/fixture.afp" room 112 && \
 	python3 -m json.tool "$$task_tmp/fixture.afp" >/dev/null && \
-	./$(PROFILE_COMPILER) describe "$$task_tmp/fixture.afx" "$$task_tmp/fixture.afp" | grep -qx 'room 112' && \
+	./$(PROFILE_COMPILER) describe "$$task_tmp/fixture.afx" "$$task_tmp/fixture.afp" | grep -qx 'room 112 256' && \
 	./$(PROFILE_COMPILER) apply "$$task_tmp/fixture.afx" "$$task_tmp/fixture.afc" "$$task_tmp/fixture.afp" \
 	"$$task_tmp/profiled.afx" "$$task_tmp/profiled.afc" && driver/build/afx_validate "$$task_tmp/profiled.afx"
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_adpcm.py

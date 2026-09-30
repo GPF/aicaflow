@@ -1,11 +1,12 @@
 {
   "format": "aicaflow.afp",
-  "version": 2,
+  "version": 3,
   "base": {
     "afx_version": 7,
     "canonical_sha256": "e5be7bc213ce728a7dd77c1a124bbf412d801852f2f19b91cf2c68878155ab61"
   },
   "dsp": { "preset": "room_warm" },
+  "tempo_q8_8": 220,
   "defaults": { "dsp_send": 128 },
   "templates": {
     "cello-steady": {

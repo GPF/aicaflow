@@ -48,13 +48,13 @@ $(ASSET_STAMP): Makefile classical.afbm $(PROFILES) $(SOURCES) $(SOUNDFONT) $(BA
 		cp "$(BASE_DIR)/$$name.afb" "$(BASE_DIR)/$$name.afv" "$(BASE_DIR)/$$name.afi" "$(BASE_DIR)/$$name.names.afi" "$(ASSET_DIR)/"; \
 	done
 	@set -e; { \
-		printf '%s\n' 'static const struct song { const char *title, *file, *bank, *dsp; bool wraps; uint32_t bytes, sample_bytes, stream_bytes, setup_bytes, padding_bytes, command_baseline_bytes, note_count; uint16_t sample_count, setup_count; uint8_t channel_count; } songs[] = {'; \
+		printf '%s\n' 'static const struct song { const char *title, *file, *bank, *dsp; bool wraps; uint32_t bytes, sample_bytes, stream_bytes, setup_bytes, padding_bytes, command_baseline_bytes, note_count; uint16_t sample_count, setup_count, tempo; uint8_t channel_count; } songs[] = {'; \
 		for entry in 'chopin-op28-no20|Chopin - Prelude Op. 28 No. 20' 'bach-bwv1007-prelude|Bach - Cello Suite 1 Prelude' 'grieg-mountain-king|Grieg - Hall of the Mountain King'; do \
 			name=$${entry%%|*}; title=$${entry#*|}; set -- $$($(AUTHOR) --summary "$(ASSET_DIR)/$$name.afb" "$(ASSET_DIR)/$$name.afx"); \
 			bytes=$$1; samples=$$2; stream=$$3; setup=$$4; notes=$$5; setups=$$6; channels=$$7; \
-			set -- $$($(PROFILE_AUTHOR) describe "$(BASE_DIR)/$$name.afx" "profiles/$$name.afp"); dsp=$$1; \
+			set -- $$($(PROFILE_AUTHOR) describe "$(BASE_DIR)/$$name.afx" "profiles/$$name.afp"); dsp=$$1; tempo=$$3; \
 			if [ "$$dsp" = dry ]; then dsp=NULL; else dsp="\"$$dsp\""; fi; \
-			printf '{"%s","%s.afx","%s.afb",%s,false,%s,%s,%s,%s,0,0,%s,%s,%s,%s},\n' "$$title" "$$name" "$$name" "$$dsp" "$$bytes" "$$samples" "$$stream" "$$setup" "$$notes" "$$setups" "$$setups" "$$channels"; \
+			printf '{"%s","%s.afx","%s.afb",%s,false,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s},\n' "$$title" "$$name" "$$name" "$$dsp" "$$bytes" "$$samples" "$$stream" "$$setup" "$$notes" "$$setups" "$$setups" "$$tempo" "$$channels"; \
 		done; \
 		printf '%s\n' '};'; \
 	} > build/include/songs.h
