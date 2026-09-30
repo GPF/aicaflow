@@ -94,7 +94,7 @@ int afx_sample_bank_upload(const void *data, uint32_t bytes, afx_asset_t *out) {
     HOST_GUARD(-AFX_BUSY);
     if (!out) return -AFX_BAD_BOUNDS;
     *out = AFX_ASSET_INVALID;
-    if (!data || !bytes || bytes > AFX_ASSET_LIMIT) return -AFX_BAD_BOUNDS;
+    if (!data || !bytes || bytes > g_asset_limit) return -AFX_BAD_BOUNDS;
     int result = upload_sample_data(data, bytes, out);
     if (!result) {
         uint32_t index;
@@ -111,7 +111,7 @@ int afx_sample_bank_stream_begin(uint32_t bytes, afx_asset_t *out) {
     HOST_GUARD(-AFX_BUSY);
     if (!out) return -AFX_BAD_BOUNDS;
     *out = AFX_ASSET_INVALID;
-    if (!bytes || bytes > AFX_ASSET_LIMIT) return -AFX_BAD_BOUNDS;
+    if (!bytes || bytes > g_asset_limit) return -AFX_BAD_BOUNDS;
     asset = reserve_asset(bytes, AFX_UPLOAD_ALIGN, false);
     if (!asset) return -AFX_NO_AICA_RAM;
     (void)resolve_asset(asset, &index);

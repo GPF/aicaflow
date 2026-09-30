@@ -20,9 +20,14 @@
 #define AFX_MAX_FLOW_SLOTS 64
 #define AFX_MAX_FLOW_CHANNELS 64
 #define AFX_CONTROL_BASE 0x1fc000
+/* DSP delay RAM is a scene-owned top reservation.  RBL 0..3 selects
+ * 8/16/32/64 Kiwords (16/32/64/128 KiB); the DSP itself also runs without
+ * external delay RAM.  Assets are always allocated below the active ring. */
 #define AFX_DSP_BYTES 0x20000
-#define AFX_DSP_BASE (AFX_CONTROL_BASE - AFX_DSP_BYTES)
-#define AFX_ASSET_LIMIT AFX_DSP_BASE
+#define AFX_DSP_MIN_BYTES 0x4000
+#define AFX_DSP_MAX_BASE (AFX_CONTROL_BASE - AFX_DSP_BYTES)
+#define AFX_DSP_RING_NONE 4u
+#define AFX_ASSET_MAX AFX_CONTROL_BASE
 #define AFX_UPLOAD_ALIGN 32
 #define AFX_STATUS_ADDR AFX_CONTROL_BASE
 #define AFX_QUEUE_ADDR (AFX_CONTROL_BASE + 0x100)
@@ -222,7 +227,7 @@ AFX_ASSERT(AFX_QUEUE_ADDR + sizeof(afx_cmd_queue_t) <= AFX_OBSERVED_ADDR, "queue
 AFX_ASSERT(AFX_OBSERVED_ADDR + 64 * sizeof(afx_observed_t) == AFX_CHANNEL_MAP_ARENA_ADDR, "observed overlap");
 AFX_ASSERT(AFX_CHANNEL_MAP_ARENA_ADDR + AFX_CHANNEL_MAP_ARENAS * AFX_CHANNEL_MAP_ARENA_SIZE == AFX_PRIVATE_BASE, "maps overlap");
 AFX_ASSERT(AFX_PRIVATE_BASE + 64 * sizeof(afx_runtime_slot_t) <= AFX_STACK_BASE, "private overlap");
-AFX_ASSERT((AFX_DSP_BASE & 2047) == 0, "DSP alignment");
+AFX_ASSERT((AFX_DSP_MAX_BASE & 2047) == 0, "DSP alignment");
 #undef AFX_ASSERT
 #endif
 #endif

@@ -11,7 +11,7 @@
 #error "A music player requires PLAYER_SHARED_BANK_FILE or PLAYER_SONG_BANK_FILE"
 #endif
 #define PLAYER_BANKED 1
-#ifdef PLAYER_ROOM_PROGRAM
+#if defined(PLAYER_ROOM_PROGRAM) || defined(PLAYER_DSP_PROGRAM)
 #include <aicaflow/dsp.h>
 #endif
 #include <malloc.h>
@@ -225,7 +225,7 @@ static int bank_control_load(const char *name, afx_asset_t *out) {
     FILE *file=open_asset(name);
     if (!file || fseek(file,0,SEEK_END)) { if (file) fclose(file); return -AFX_BAD_BOUNDS; }
     long length=ftell(file);
-    if (length<=0 || length>AFX_ASSET_LIMIT || fseek(file,0,SEEK_SET)) { fclose(file); return -AFX_BAD_BOUNDS; }
+    if (length<=0 || length>AFX_ASSET_MAX || fseek(file,0,SEEK_SET)) { fclose(file); return -AFX_BAD_BOUNDS; }
     uint8_t *data=memalign(32,(size_t)length);
     if (!data) { fclose(file); return -AFX_NO_HOST_RAM; }
     int result = -AFX_BAD_BOUNDS;
@@ -249,7 +249,7 @@ static int bank_control_load(const char *name, afx_asset_t *out) {
     if (!file) return AFX_OK; /* Seeking is optional; normal playback needs only AFB+AFX. */
     if (fseek(file,0,SEEK_END)) { fclose(file); return -AFX_BAD_BOUNDS; }
     length=ftell(file);
-    if (length<=0 || length>AFX_ASSET_LIMIT || fseek(file,0,SEEK_SET)) { fclose(file); return -AFX_BAD_BOUNDS; }
+    if (length<=0 || length>AFX_ASSET_MAX || fseek(file,0,SEEK_SET)) { fclose(file); return -AFX_BAD_BOUNDS; }
     data=memalign(32,(size_t)length);
     if (!data) { fclose(file); return -AFX_NO_HOST_RAM; }
     if (asset_read(data,(size_t)length,file)!=(size_t)length || ferror(file)) result=-AFX_BAD_BOUNDS;
@@ -266,7 +266,7 @@ static int load_firmware(void) {
     int r=-AFX_BAD_FIRMWARE;
     uint8_t *data=NULL;
     if (size>=AFX_FIRMWARE_INFO_OFFSET+AFX_FIRMWARE_INFO_BYTES &&
-        size<=AFX_ASSET_LIMIT && !fseek(f,0,SEEK_SET)) {
+        size<=AFX_ASSET_MAX && !fseek(f,0,SEEK_SET)) {
         data=memalign(32,size);
         if (!data) r=-AFX_NO_HOST_RAM;
         else if (asset_read(data,size,f)==(size_t)size && !ferror(f))
@@ -388,10 +388,14 @@ static void load_visual_chunk(void) {
 }
 static int room(const char *name) {
     if (room_cached) return AFX_OK;
-#ifdef PLAYER_ROOM_PROGRAM
-    (void)name;
+#if defined(PLAYER_DSP_PROGRAM) || defined(PLAYER_ROOM_PROGRAM)
     afx_dsp_program_t program;
+#ifdef PLAYER_DSP_PROGRAM
+    int r=PLAYER_DSP_PROGRAM(name,&program);
+#else
+    (void)name;
     int r=PLAYER_ROOM_PROGRAM(&program);
+#endif
     if (!r) r=afx_dsp_scene_program(&program,sizeof(program));
     if (!r) room_cached=true;
     return r;
@@ -419,7 +423,7 @@ static int start(void) {
     if (!r && songs[index].dsp) r=room(songs[index].dsp);
     if (!r && room_cached) r=afx_dsp_scene_returns(songs[index].dsp != NULL);
 #else
-    if (!r && songs[index].dsp) r=room(songs[index].dsp);
+    if (!r && room_cached) r=afx_dsp_scene_returns(true);
 #endif
     if (r) { stop(); return r; }
     playing=index;
@@ -436,7 +440,10 @@ static int play(int index) {
     int r=unload();
     if (r) return r;
 #ifdef PLAYER_SONG_BANK_FILE
-    r=song_bank_load(PLAYER_SONG_BANK_FILE(index));
+    /* Choose DSP RAM before bank allocation. A no-DSP song leaves the full
+       arena to its own AFB; a room scene reserves its ring first. */
+    if (songs[index].dsp) r=room(songs[index].dsp);
+    if (!r) r=song_bank_load(PLAYER_SONG_BANK_FILE(index));
     if (r) return r;
 #endif
     r=bank_control_load(songs[index].file,&asset);

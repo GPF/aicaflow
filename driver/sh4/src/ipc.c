@@ -1,6 +1,6 @@
 #include "host_internal.h"
 
-uint32_t g_dynamic_base;
+uint32_t g_dynamic_base, g_asset_limit;
 afx_block_t *g_free_blocks, *g_allocs;
 uint32_t g_free_count, g_free_capacity, g_alloc_count, g_alloc_capacity;
 afx_asset_slot_t *g_assets;

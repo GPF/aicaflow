@@ -31,7 +31,7 @@ void spu_disable(void) { running = 0; ++resets; }
 void spu_memload(uintptr_t address, const void *source, size_t size) {
     assert(!(address & 3) && !((uintptr_t)source & 3) && !(size & 3));
     assert(address <= sizeof(ram) && size <= sizeof(ram) - address);
-    if (running) assert(address >= asset_base && size <= AFX_ASSET_LIMIT - address);
+    if (running) assert(address >= asset_base && size <= AFX_ASSET_MAX - address);
     memcpy(ram + address, source, size);
 }
 void spu_memset(uintptr_t address, uint32_t value, size_t size) {
@@ -97,7 +97,7 @@ void spu_enable(void) {
     afx_write32(s + offsetof(afx_status_t, layout_id), AFX_LAYOUT_ID);
     afx_write32(s + offsetof(afx_status_t, capabilities), AFX_CAP_BOOTSTRAP | AFX_CAP_LIFECYCLE);
     afx_write32(s + offsetof(afx_status_t, asset_base), asset_base);
-    afx_write32(s + offsetof(afx_status_t, asset_limit), AFX_ASSET_LIMIT);
+    afx_write32(s + offsetof(afx_status_t, asset_limit), AFX_ASSET_MAX);
     afx_write32(s + offsetof(afx_status_t, private_end), afx_read32(m + 24));
     afx_write32(s + offsetof(afx_status_t, stack_base), AFX_STACK_BASE);
 }

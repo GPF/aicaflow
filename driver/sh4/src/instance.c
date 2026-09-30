@@ -257,7 +257,7 @@ static int checkpoint_states(const afx_asset_slot_t *flow, uint32_t tick,
                     !g_assets[dependency].sample_bank) { free(out); return -AFX_BAD_FORMAT; }
                 samples = &g_assets[dependency];
             }
-            if (relative >= samples->size || samples->addr > AFX_ASSET_LIMIT - relative) {
+            if (relative >= samples->size || samples->addr > g_asset_limit - relative) {
                 free(out); return -AFX_BAD_FORMAT;
             }
             uint32_t address = samples->addr + relative;

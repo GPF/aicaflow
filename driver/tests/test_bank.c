@@ -1,5 +1,6 @@
 #include <aicaflow/bank.h>
 #include <aicaflow/codec.h>
+#include <aicaflow/dsp.h>
 
 #include <assert.h>
 #include <string.h>
@@ -9,7 +10,7 @@
 
 static void firmware(uint8_t image[64]) {
     uint32_t manifest[] = {AFX_FIRMWARE_MAGIC, AFX_ABI_VERSION, AFX_LAYOUT_ID, 64, 64,
-                           AFX_ASSET_LIMIT, AFX_PRIVATE_BASE + 64 * sizeof(afx_runtime_slot_t),
+                           AFX_ASSET_MAX, AFX_PRIVATE_BASE + 64 * sizeof(afx_runtime_slot_t),
                            AFX_STACK_BASE};
     memset(image, 0, 64);
     for (unsigned i = 0; i < 8; ++i) afx_write32(image + 32 + 4 * i, manifest[i]);
@@ -43,6 +44,24 @@ int main(void) {
     afx_bank_t bank = {0};
     afx_asset_t flow;
     firmware(fw); assert(afx_init(fw, sizeof(fw)) == AFX_OK);
+    afx_dsp_program_t dsp;
+    afx_mem_stats_t memory;
+    assert(afx_mem_stats(&memory) == AFX_OK && memory.asset_limit == AFX_ASSET_MAX);
+    assert(afx_dsp_program_gain(&dsp, 8192) == AFX_OK);
+    sleep_observe_reference = AFX_DSP_SCENE_REFERENCE;
+    assert(afx_dsp_scene_program(&dsp, sizeof(dsp)) == AFX_OK);
+    assert(afx_mem_stats(&memory) == AFX_OK && memory.asset_limit == AFX_ASSET_MAX);
+    sleep_observe_reference = AFX_DSP_SCENE_REFERENCE;
+    assert(afx_dsp_scene_disable() == AFX_OK);
+    assert(afx_dsp_program_delay(&dsp, 7938, 8192, false) == AFX_OK);
+    sleep_observe_reference = AFX_DSP_SCENE_REFERENCE;
+    assert(afx_dsp_scene_program_ring(&dsp, sizeof(dsp), 0) == AFX_OK);
+    assert(afx_mem_stats(&memory) == AFX_OK && memory.asset_limit == AFX_CONTROL_BASE - AFX_DSP_MIN_BYTES);
+    assert(afx_dsp_program_delay(&dsp, 9000, 8192, false) == AFX_OK);
+    assert(afx_dsp_scene_program_ring(&dsp, sizeof(dsp), 0) == -AFX_BAD_BOUNDS);
+    sleep_observe_reference = AFX_DSP_SCENE_REFERENCE;
+    assert(afx_dsp_scene_disable() == AFX_OK);
+    assert(afx_mem_stats(&memory) == AFX_OK && memory.asset_limit == AFX_ASSET_MAX);
     bank_file(bank_data, 0x12345678u, 0x9abcdef0u);
     flow_file(flow_data, 0x12345678u, 0x9abcdef0u);
     assert(afx_file_validate(flow_data, sizeof(flow_data), NULL) == AFX_OK);

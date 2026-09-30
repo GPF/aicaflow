@@ -45,7 +45,7 @@ typedef struct {
     afx_instance_status_t status;
 } afx_instance_slot_t;
 
-extern uint32_t g_dynamic_base;
+extern uint32_t g_dynamic_base, g_asset_limit;
 extern afx_block_t *g_free_blocks, *g_allocs;
 extern uint32_t g_free_count, g_free_capacity, g_alloc_count, g_alloc_capacity;
 extern afx_asset_slot_t *g_assets;
@@ -73,6 +73,7 @@ bool in_asset_arena(uint32_t address, uint32_t size);
 bool allocation_diagnostic(uint32_t size, uint32_t align, afx_mem_diagnostic_t *out);
 bool reserve_assets(uint32_t need);
 bool allocator_reset(uint32_t dynamic_base);
+bool allocator_set_limit(uint32_t limit);
 bool free_allocation(uint32_t address);
 bool resolve_asset(afx_asset_t asset, uint32_t *index);
 afx_asset_t reserve_asset(uint32_t size, uint32_t align, bool live);

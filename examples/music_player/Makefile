@@ -5,15 +5,18 @@ SOURCES := sources/chopin-op28-no20.mid sources/bach-bwv1007-prelude.mid \
 DEFAULT_SOUNDFONT := sources/GeneralUser.sf2
 SOUNDFONT ?= $(DEFAULT_SOUNDFONT)
 ASSET_DIR := build/assets
+BASE_DIR := build/base
 ASSET_STAMP := $(ASSET_DIR)/.prepared
-ASSETS := $(addprefix $(ASSET_DIR)/,classical.afb chopin-op28-no20.afx chopin-op28-no20.afc chopin-op28-no20.afv \
-	bach-bwv1007-prelude.afx bach-bwv1007-prelude.afc bach-bwv1007-prelude.afv \
-	grieg-mountain-king.afx grieg-mountain-king.afc grieg-mountain-king.afv)
+PROFILES := $(addprefix profiles/,chopin-op28-no20.afp bach-bwv1007-prelude.afp grieg-mountain-king.afp)
+ASSETS := $(addprefix $(ASSET_DIR)/,chopin-op28-no20.afb chopin-op28-no20.afx chopin-op28-no20.afc chopin-op28-no20.afv \
+	bach-bwv1007-prelude.afb bach-bwv1007-prelude.afx bach-bwv1007-prelude.afc bach-bwv1007-prelude.afv \
+	grieg-mountain-king.afb grieg-mountain-king.afx grieg-mountain-king.afc grieg-mountain-king.afv)
 DISC := $(ENJ_ROMDIR)/$(ENJ_BASENAME)
 DISC_STAMP := $(DISC)/.assets
 FIRMWARE := $(DISC)/aicaflow.drv
 AUTHOR := ../../build/afx_compile_c
 BANK_AUTHOR := ../../build/afx_bank_c
+PROFILE_AUTHOR := ../../build/afx_profile_c
 
 assets: $(ASSET_STAMP) $(FIRMWARE)
 
@@ -28,20 +31,27 @@ $(SOUNDFONT):
 	@test -f "$@" || { echo "Missing alternate SoundFont: $@" >&2; exit 1; }
 endif
 
-$(AUTHOR) $(BANK_AUTHOR): ../../tools/author/afx_compile_c.c ../../tools/author/afx_compile_c.h \
+$(AUTHOR) $(BANK_AUTHOR) $(PROFILE_AUTHOR): ../../tools/author/afx_compile_c.c ../../tools/author/afx_compile_c.h \
 	../../tools/author/afx_compile_c_cli.c ../../tools/author/afx_midi_c.c \
 	../../tools/author/afx_midi_c.h ../../tools/author/afx_sf2_c.c ../../tools/author/afx_sf2_c.h \
-	../../tools/author/afx_bank_c.c
+	../../tools/author/afx_bank_c.c ../../tools/author/afx_profile_c.c
 	$(MAKE) -C ../.. compiler
 
-$(ASSET_STAMP): classical.afbm $(SOURCES) $(SOUNDFONT) $(BANK_AUTHOR) ../../tools/author/afx_sample_c.c ../../tools/author/afx_ya2beam.c
-	@mkdir -p $(ASSET_DIR) build/include
-	$(BANK_AUTHOR) classical.afbm "$(ASSET_DIR)" "$(ASSET_DIR)/classical.afb"
+$(ASSET_STAMP): classical.afbm $(PROFILES) $(SOURCES) $(SOUNDFONT) $(BANK_AUTHOR) $(PROFILE_AUTHOR) ../../tools/author/afx_sample_c.c ../../tools/author/afx_ya2beam.c
+	@mkdir -p $(ASSET_DIR) $(BASE_DIR) build/include
+	$(BANK_AUTHOR) --per-song classical.afbm "$(BASE_DIR)"
+	@set -e; for name in chopin-op28-no20 bach-bwv1007-prelude grieg-mountain-king; do \
+		$(PROFILE_AUTHOR) apply "$(BASE_DIR)/$$name.afx" "$(BASE_DIR)/$$name.afc" "profiles/$$name.afp" "$(ASSET_DIR)/$$name.afx" "$(ASSET_DIR)/$$name.afc"; \
+		cp "$(BASE_DIR)/$$name.afb" "$(BASE_DIR)/$$name.afv" "$(ASSET_DIR)/"; \
+	done
 	@set -e; { \
 		printf '%s\n' 'static const struct song { const char *title, *file, *bank, *dsp; bool wraps; uint32_t bytes, sample_bytes, stream_bytes, setup_bytes, padding_bytes, command_baseline_bytes, note_count; uint16_t sample_count, setup_count; uint8_t channel_count; } songs[] = {'; \
 		for entry in 'chopin-op28-no20|Chopin - Prelude Op. 28 No. 20' 'bach-bwv1007-prelude|Bach - Cello Suite 1 Prelude' 'grieg-mountain-king|Grieg - Hall of the Mountain King'; do \
-			name=$${entry%%|*}; title=$${entry#*|}; set -- $$($(AUTHOR) --summary "$(ASSET_DIR)/classical.afb" "$(ASSET_DIR)/$$name.afx"); \
-			printf '{"%s","%s.afx",NULL,NULL,false,%s,%s,%s,%s,0,0,0,%s,%s,%s},\n' "$$title" "$$name" "$$1" "$$2" "$$3" "$$4" "$$5" "$$5" "$$6"; \
+			name=$${entry%%|*}; title=$${entry#*|}; set -- $$($(AUTHOR) --summary "$(ASSET_DIR)/$$name.afb" "$(ASSET_DIR)/$$name.afx"); \
+			bytes=$$1; samples=$$2; stream=$$3; setup=$$4; notes=$$5; setups=$$6; channels=$$7; \
+			set -- $$($(PROFILE_AUTHOR) describe "$(BASE_DIR)/$$name.afx" "profiles/$$name.afp"); dsp=$$1; \
+			if [ "$$dsp" = dry ]; then dsp=NULL; else dsp="\"$$dsp\""; fi; \
+			printf '{"%s","%s.afx","%s.afb",%s,false,%s,%s,%s,%s,0,0,%s,%s,%s,%s},\n' "$$title" "$$name" "$$name" "$$dsp" "$$bytes" "$$samples" "$$stream" "$$setup" "$$notes" "$$setups" "$$setups" "$$channels"; \
 		done; \
 		printf '%s\n' '};'; \
 	} > build/include/songs.h
@@ -51,6 +61,7 @@ build/include/songs.h: $(ASSET_STAMP)
 
 $(DISC_STAMP): $(ASSET_STAMP)
 	@mkdir -p $(DISC)
+	@rm -f "$(DISC)/classical.afb"
 	cp $(ASSETS) $(DISC)/
 	touch $@
 
@@ -71,10 +82,9 @@ $(ENJ_BINDIR)/$(ENJ_BASENAME).cdi: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf $(DISC_STAM
 .PHONY: assets fetch-assets check
 
 check: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf $(DISC_STAMP) ../../driver/build/afx_validate
-	test -f $(ASSET_DIR)/classical.afb
-	test $$(find $(ASSET_DIR) -name '*.afx' | wc -l) -eq 3
-	test $$(find $(ASSET_DIR) -name '*.afc' | wc -l) -eq 3
-	test $$(find $(ASSET_DIR) -name '*.afv' | wc -l) -eq 3
+	@for name in chopin-op28-no20 bach-bwv1007-prelude grieg-mountain-king; do \
+		for extension in afb afx afc afv; do test -s "$(ASSET_DIR)/$$name.$$extension"; done; \
+	done
 	@for flow in $(ASSET_DIR)/*.afx; do ../../driver/build/afx_validate "$$flow"; done
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; mkdir "$$task_tmp/out"; \
 	$(BANK_AUTHOR) --create-map "$$task_tmp/generated.afbm" "$(SOUNDFONT)" generated "$(firstword $(SOURCES))" && \

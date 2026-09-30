@@ -131,10 +131,15 @@ int afx_instance_lanes_set(afx_instance_t instance, uint32_t modifier,
 /* The one AICA DSP program belongs to the loaded scene, never to a flow.
  * Build a runtime image with <aicaflow/dsp.h>; this operation prepares,
  * validates and uploads it atomically. It also replaces an active scene with
- * its returns muted. Scene teardown disables it and clears delay RAM. */
+ * its returns muted. Scene teardown disables it and clears delay RAM.
+ *
+ * SH4 owns the shared AICA asset arena. Programs with no MRD/MWT instructions
+ * reserve no delay RAM. Programs with delay RAM reserve 128 KiB by default;
+ * install the scene before its AFB when choosing a smaller ring. */
 int afx_dsp_scene_program(const void *program, uint32_t bytes);
 /* As afx_dsp_scene_program(), but selects the AICA delay-ring RBL value
- * (0..3: 8/16/32/64 Kiwords).  The regular API remains RBL=3. */
+ * (0..3: 8/16/32/64 Kiwords). A no-memory program automatically reserves
+ * zero bytes regardless of rbl. A change that overlaps a live asset fails. */
 int afx_dsp_scene_program_ring(const void *program, uint32_t bytes, uint8_t rbl);
 /* Gates the current scene program’s stereo returns without replacing its state. */
 int afx_dsp_scene_returns(bool enabled);

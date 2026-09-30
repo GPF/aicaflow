@@ -9,7 +9,9 @@ the AFX's bank-relative addresses before activation.
   stream; it names exactly one AFB identity.
 - `.afc` — optional SH4-only seek checkpoints for one exact AFX/AFB pair.
 - `.afv` — optional player visualisation sidecar; never consumed by the driver.
-- `.afp` — offline performance profile that produces a derived AFX; never
+- `.afp` — offline performance profile bound to one exact base AFX by
+  SHA-256. It owns DSP scene choice and DSP-send level as well as future
+  per-tone template assignments; it produces a derived AFX and is never
   uploaded to Dreamcast.
 - `.afi` — optional offline AFB sample-offset index; it is not needed to play
   an AFX and is never sent to ARM7.

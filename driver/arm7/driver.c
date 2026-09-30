@@ -39,6 +39,7 @@ static uint16_t voice_base_mix[AFX_AICA_CHANNEL_COUNT];
 static uint16_t voice_base_direct[AFX_AICA_CHANNEL_COUNT];
 static uint16_t voice_base_dsp_send[AFX_AICA_CHANNEL_COUNT];
 static uint32_t dsp_owner;
+static uint32_t dsp_delay_base, dsp_delay_bytes, dsp_asset_limit = AFX_ASSET_MAX;
 extern uint8_t __asset_base[], __private_end[];
 extern void arm_fiq_enable(void);
 
@@ -58,8 +59,14 @@ static void dsp_returns(int enabled) {
     dsp_write(0x2004u, enabled ? 0x0f0fu : 0);
 }
 static void dsp_clear_delay(void) {
-    volatile uint32_t *delay = (volatile uint32_t *)AFX_DSP_BASE;
-    for (uint32_t word = 0; word < AFX_DSP_BYTES / sizeof(*delay); ++word) delay[word] = 0;
+    volatile uint32_t *delay = (volatile uint32_t *)dsp_delay_base;
+    for (uint32_t word = 0; word < dsp_delay_bytes / sizeof(*delay); ++word) delay[word] = 0;
+}
+static void dsp_set_ring(uint32_t bytes) {
+    dsp_delay_bytes = bytes;
+    dsp_delay_base = AFX_CONTROL_BASE - bytes;
+    dsp_asset_limit = dsp_delay_base;
+    STATUS->asset_limit = dsp_asset_limit;
 }
 static void dsp_disable(void) {
     dsp_returns(0);
@@ -68,6 +75,11 @@ static void dsp_disable(void) {
     for (uint32_t word = 0; word < 64u; ++word) dsp_write(0x4400u + word * 4u, 0);
     for (uint32_t word = 0; word < 16u; ++word) dsp_write(0x4580u + word * 4u, 0);
     dsp_clear_delay();
+    dsp_write(0x2804u, 0);
+    dsp_delay_base = AFX_CONTROL_BASE;
+    dsp_delay_bytes = 0;
+    dsp_asset_limit = AFX_ASSET_MAX;
+    STATUS->asset_limit = dsp_asset_limit;
     dsp_owner = 0;
 }
 
@@ -418,7 +430,7 @@ static void activation(uint32_t reference, uint32_t sequence, const uint8_t payl
     STATUS->reserved = 0xa1030000u;
     if (contexts[index].reference || activate.reserved[0] || activate.reserved[1] ||
         !activate.required_channels || activate.required_channels > AFX_MAX_FLOW_CHANNELS ||
-        !range(activate.image_base, activate.image_size, AFX_ASSET_LIMIT) ||
+        !range(activate.image_base, activate.image_size, dsp_asset_limit) ||
         !range(activate.stream_offset, activate.stream_size, activate.image_size) ||
         !activate.stream_size || (activate.setups_offset & 1u) ||
         activate.setup_count > 65536u ||
@@ -540,7 +552,7 @@ static void rebuild(uint32_t reference, uint32_t sequence, uint32_t flags,
         request.reserved[5] || request.reserved[6] ||
         request.state_count > context->channels ||
         !range(request.states_address, request.state_count * sizeof(afx_restore_channel_t),
-               AFX_ASSET_LIMIT) || request.stream_position < context->stream_start ||
+               dsp_asset_limit) || request.stream_position < context->stream_start ||
         request.stream_position >= stream_end) {
         publish(index, reference, context->state, sequence, AFX_BAD_COMMAND,
                 stream_position(context), context->deadline, 0);
@@ -681,16 +693,22 @@ static void scene_result(uint32_t sequence, uint32_t result) {
     STATUS->dsp_sequence = sequence;
 }
 static void dsp_control(uint32_t opcode, uint32_t reference, uint32_t sequence, uint32_t flags) {
-    uint32_t ring_code = flags >> 8;
+    uint32_t ring_code = (flags >> 8) & 3u;
+    uint32_t no_ring = flags & 0x400u;
     uint32_t rbl = ring_code ? ring_code - 1u : 3u;
-    if (reference != AFX_DSP_SCENE_REFERENCE || (flags & ~0x301u) || !(flags & 1u) || ring_code > 3u) {
+    if (reference != AFX_DSP_SCENE_REFERENCE || (flags & ~0x701u) || !(flags & 1u) || ring_code > 3u ||
+        (no_ring && ring_code)) {
         scene_result(sequence, AFX_BAD_COMMAND);
         return;
     }
     if (opcode == AFX_CMD_DSP_ENABLE) {
         dsp_disable();
         dsp_nop();
-        dsp_write(0x2804u, (rbl << 13) | (AFX_DSP_BASE >> 11));
+        if (!no_ring) {
+            uint32_t bytes = AFX_DSP_MIN_BYTES << rbl;
+            dsp_set_ring(bytes);
+            dsp_write(0x2804u, (rbl << 13) | (dsp_delay_base >> 11));
+        }
         dsp_owner = AFX_DSP_SCENE_REFERENCE; /* Prepared silently for program upload. */
     } else if (dsp_owner == AFX_DSP_SCENE_REFERENCE) dsp_disable();
     else {
@@ -780,7 +798,7 @@ void arm_main(void) {
     dsp_disable();
     STATUS->capabilities = AFX_CAP_BOOTSTRAP | AFX_CAP_LIFECYCLE | AFX_CAP_PLAYBACK | AFX_CAP_DSP;
     STATUS->asset_base = (uint32_t)__asset_base;
-    STATUS->asset_limit = AFX_ASSET_LIMIT;
+    STATUS->asset_limit = AFX_ASSET_MAX;
     STATUS->private_end = (uint32_t)__private_end;
     STATUS->stack_base = AFX_STACK_BASE;
     STATUS->timer_ticks = 0;

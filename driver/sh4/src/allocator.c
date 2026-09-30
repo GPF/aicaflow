@@ -22,6 +22,7 @@ static bool reserve_free(uint32_t need) {
 static bool reserve_allocs(uint32_t need) {
     return grow((void **)&g_allocs, &g_alloc_capacity, need, sizeof(*g_allocs));
 }
+static bool insert_free_block(uint32_t address, uint32_t size);
 bool reserve_assets(uint32_t need) {
     return need <= UINT16_MAX &&
            grow((void **)&g_assets, &g_asset_capacity, need, sizeof(*g_assets));
@@ -33,13 +34,13 @@ uint32_t align_up(uint32_t value, uint32_t align) {
 }
 bool in_asset_arena(uint32_t address, uint32_t size) {
     return g_dynamic_base && size && address >= g_dynamic_base &&
-           address < AFX_ASSET_LIMIT && afx_range(address, size, AFX_ASSET_LIMIT);
+           address < g_asset_limit && afx_range(address, size, g_asset_limit);
 }
 bool allocation_diagnostic(uint32_t size, uint32_t align, afx_mem_diagnostic_t *out) {
     if (!g_ready || !out || !size || (align && (align & (align - 1u)))) return false;
     uint32_t use_align = align > AFX_UPLOAD_ALIGN ? align : AFX_UPLOAD_ALIGN;
     uint32_t aligned = align_up(size, AFX_UPLOAD_ALIGN);
-    if (!aligned || use_align > AFX_ASSET_LIMIT) return false;
+    if (!aligned || use_align > g_asset_limit) return false;
     memset(out, 0, sizeof(*out));
     out->requested_bytes = size;
     out->aligned_bytes = aligned;
@@ -61,6 +62,7 @@ bool allocation_diagnostic(uint32_t size, uint32_t align, afx_mem_diagnostic_t *
 bool allocator_reset(uint32_t dynamic_base) {
     upload_dma_wait();
     g_dynamic_base = 0;
+    g_asset_limit = AFX_ASSET_MAX;
     g_free_count = g_alloc_count = 0;
     for (uint32_t i = 0; i < g_asset_capacity; ++i) {
         free(g_assets[i].checkpoints);
@@ -103,12 +105,43 @@ bool allocator_reset(uint32_t dynamic_base) {
     g_dsp_scene = false;
     g_dsp_return_left = g_dsp_return_right = 0;
     g_next_sequence = 1;
-    if (!dynamic_base || dynamic_base >= AFX_ASSET_LIMIT || !reserve_free(1))
+    if (!dynamic_base || dynamic_base >= g_asset_limit || !reserve_free(1))
         return false;
     g_dynamic_base = dynamic_base;
-    g_free_blocks[0] = (afx_block_t){dynamic_base, AFX_ASSET_LIMIT - dynamic_base};
+    g_free_blocks[0] = (afx_block_t){dynamic_base, g_asset_limit - dynamic_base};
     g_free_count = 1;
     return true;
+}
+/* The DSP ring is the sole top-of-arena reservation.  Shrinking is allowed
+ * only when every existing asset remains below it; expanding returns the old
+ * ring range to the ordinary SH4-owned allocator. */
+bool allocator_set_limit(uint32_t limit) {
+    if (!g_ready || limit < g_dynamic_base || limit > AFX_ASSET_MAX ||
+        (limit & (AFX_DSP_MIN_BYTES - 1u))) return false;
+    if (limit == g_asset_limit) return true;
+    upload_dma_wait();
+    if (limit < g_asset_limit) {
+        for (uint32_t i = 0; i < g_alloc_count; ++i)
+            if (g_allocs[i].addr > limit || g_allocs[i].size > limit - g_allocs[i].addr)
+                return false;
+        for (uint32_t i = 0; i < g_free_count;) {
+            afx_block_t *block = g_free_blocks + i;
+            if (block->addr >= limit) {
+                memmove(block, block + 1, (g_free_count - i - 1u) * sizeof(*block));
+                --g_free_count;
+            } else {
+                if (block->size > limit - block->addr) block->size = limit - block->addr;
+                ++i;
+            }
+        }
+        g_asset_limit = limit;
+        return true;
+    }
+    uint32_t old_limit = g_asset_limit;
+    g_asset_limit = limit;
+    if (insert_free_block(old_limit, limit - old_limit)) return true;
+    g_asset_limit = old_limit;
+    return false;
 }
 static bool insert_free_block(uint32_t address, uint32_t size) {
     if (!in_asset_arena(address, size)) return false;
@@ -144,7 +177,7 @@ uint32_t afx_mem_alloc(uint32_t size, uint32_t align) {
     if (!g_ready || !size || (align && (align & (align - 1u)))) return 0;
     uint32_t use_align = align > AFX_UPLOAD_ALIGN ? align : AFX_UPLOAD_ALIGN;
     size = align_up(size, AFX_UPLOAD_ALIGN);
-    if (!size || use_align > AFX_ASSET_LIMIT || !reserve_allocs(g_alloc_count + 1))
+    if (!size || use_align > g_asset_limit || !reserve_allocs(g_alloc_count + 1))
         return 0;
 
     uint32_t best = UINT32_MAX, best_start = 0, best_pad = 0, best_remain = UINT32_MAX;
@@ -219,8 +252,8 @@ int afx_mem_stats(afx_mem_stats_t *out) {
     if (!g_ready || !out) return -AFX_BAD_BOUNDS;
     memset(out, 0, sizeof(*out));
     out->dynamic_base = g_dynamic_base;
-    out->asset_limit = AFX_ASSET_LIMIT;
-    out->total_bytes = AFX_ASSET_LIMIT - g_dynamic_base;
+    out->asset_limit = g_asset_limit;
+    out->total_bytes = g_asset_limit - g_dynamic_base;
     out->active_allocations = g_alloc_count;
     out->free_block_count = g_free_count;
     for (uint32_t i = 0; i < g_free_count; ++i) {
