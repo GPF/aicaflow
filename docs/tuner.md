@@ -23,6 +23,17 @@ Python packages are needed):
 python3 tools/tuner/client.py --host "$DCTOOL_HOST" ping
 ```
 
+`tools/tuner/example.py` is the equivalent small Python program when a project
+wants to drive the tuner itself rather than shelling out to the client:
+
+```sh
+python3 tools/tuner/example.py music.afb title.afx --index title.afc --reset
+```
+
+It performs `ping`, optional hard reset, bank upload, control upload, optional
+seek-index upload and a final `status` read. Add `--region START_MS DURATION_MS`
+to immediately audition one passage.
+
 ## Normal workflow
 
 An AFX is always a control flow bound to one AFB. Upload the shared bank once,

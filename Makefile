@@ -36,6 +36,8 @@ check: $(C_COMPILER) $(C_COMPILER_TEST)
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_perf.py
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_sf2.py
 	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_make_fixture_midi.py
+	PYTHONPATH=tools/tuner python3 tools/test/test_afx_tuner_client.py
+	PYTHONPATH=tools/tuner python3 tools/test/test_afx_tuner_example.py
 
 $(C_COMPILER): tools/author/afx_compile_c.c tools/author/afx_compile_c.h tools/author/afx_compile_c_cli.c tools/author/afx_midi_c.c tools/author/afx_midi_c.h tools/author/afx_sample_c.c tools/author/afx_sample_c.h tools/author/afx_sf2_c.c tools/author/afx_sf2_c.h tools/author/afx_ya2beam.c driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build
