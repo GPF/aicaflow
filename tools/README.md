@@ -2,11 +2,11 @@
 
 `make compiler` builds the supported native C authoring tools:
 
-- `build/afx_compile_c` — one MIDI plus PCM zones or one SoundFont to AFB/AFX,
+- `build/afx_compile` — one MIDI plus PCM zones or one SoundFont to AFB/AFX,
   with matching AFC/AFV sidecars.
-- `build/afx_bank_c` — an editable `.afbm` map to one shared AFB and a flow
+- `build/afx_bank` — an editable `.afbm` map to one shared AFB and a flow
   plus sidecars for each declared song.
-- `build/afx_profile_c` — initialise, inspect and apply an `.afp` performance
+- `build/afx_profile` — initialise, inspect and apply an `.afp` performance
   profile to an AFX/AFC pair.
 - `build/afx_demo_assets` — deterministic small assets for examples/tests.
 

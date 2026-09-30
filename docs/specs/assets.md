@@ -113,7 +113,7 @@ The release schema starts like this:
 
 `init` writes a complete note inventory so an editor has stable event identity.
 An ordinal is the zero-based position among note events at the same tick; it is
-not a timing offset. Today `afx_profile_c apply` applies the common DSP preset
+not a timing offset. Today `afx_profile apply` applies the common DSP preset
 and send to the setup templates and rewrites AFX/AFC identities. It validates
 the whole profile binding but does not yet use individual assignments to make
 per-note setup copies. That extension remains an offline compiler task and
@@ -124,7 +124,7 @@ Supported preset names are `dry`, `room`, `room_warm` and `room_large`;
 
 ## AFBM — bank map
 
-AFBM is a human-edited text input to `afx_bank_c`, not a runtime asset. It
+AFBM is a human-edited text input to `afx_bank`, not a runtime asset. It
 combines several MIDI files and SoundFonts into one shared bank while keeping
 one bank binding per generated flow:
 

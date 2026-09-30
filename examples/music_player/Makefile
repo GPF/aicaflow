@@ -14,9 +14,9 @@ ASSETS := $(addprefix $(ASSET_DIR)/,chopin-op28-no20.afb chopin-op28-no20.afx ch
 DISC := $(ENJ_ROMDIR)/$(ENJ_BASENAME)
 DISC_STAMP := $(DISC)/.assets
 FIRMWARE := $(DISC)/aicaflow.drv
-AUTHOR := ../../build/afx_compile_c
-BANK_AUTHOR := ../../build/afx_bank_c
-PROFILE_AUTHOR := ../../build/afx_profile_c
+AUTHOR := ../../build/afx_compile
+BANK_AUTHOR := ../../build/afx_bank
+PROFILE_AUTHOR := ../../build/afx_profile
 
 assets: $(ASSET_STAMP) $(FIRMWARE)
 

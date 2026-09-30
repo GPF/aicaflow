@@ -30,7 +30,7 @@ host validation; maintainers with the ARM toolchain run `make firmware-check`
 to reproduce the release image.
 
 `make compiler` builds the native C authoring tools. They emit AFB, AFX, AFC
-and AFV from MIDI plus raw PCM zones or an SF2; `afx_bank_c` builds one shared
+and AFV from MIDI plus raw PCM zones or an SF2; `afx_bank` builds one shared
 AFB for a declared list of songs. Python lives only in `tools/research` and
 `tools/test` as optional reference tooling.
 

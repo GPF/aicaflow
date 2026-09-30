@@ -3,11 +3,11 @@ SHELL := /bin/bash
 KOS_ENV ?= /opt/toolchains/dc/kos/environ.sh
 EXAMPLES := quickstart dsp_demo dynamic_sfx dsp_effects_player music_player
 TOOLS := tuner/server
-C_COMPILER := build/afx_compile_c
-C_COMPILER_TEST := build/test_afx_compile_c
+C_COMPILER := build/afx_compile
+C_COMPILER_TEST := build/test_afx_compile
 DEMO_ASSETS := build/afx_demo_assets
-BANK_COMPILER := build/afx_bank_c
-PROFILE_COMPILER := build/afx_profile_c
+BANK_COMPILER := build/afx_bank
+PROFILE_COMPILER := build/afx_profile
 
 .PHONY: all examples tools check compiler firmware firmware-check clean
 
@@ -81,4 +81,5 @@ clean:
 	@for example in $(EXAMPLES); do $(MAKE) -C examples/$$example clean; done
 	@for tool in $(TOOLS); do $(MAKE) -C tools/$$tool clean; done
 	$(MAKE) -C driver clean
-	rm -f $(C_COMPILER) $(C_COMPILER_TEST) $(DEMO_ASSETS) $(BANK_COMPILER) $(PROFILE_COMPILER)
+	rm -f $(C_COMPILER) $(C_COMPILER_TEST) $(DEMO_ASSETS) $(BANK_COMPILER) $(PROFILE_COMPILER) \
+		build/afx_compile_c build/test_afx_compile_c build/afx_bank_c build/afx_profile_c
