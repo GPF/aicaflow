@@ -16,9 +16,12 @@ examples:
 		source $(KOS_ENV) && $(MAKE) -C examples/$$example || exit $$?; \
 	done
 
-check: $(C_COMPILER_TEST)
+check: $(C_COMPILER) $(C_COMPILER_TEST)
 	$(MAKE) -C driver smoke
 	./$(C_COMPILER_TEST)
+	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; \
+	./$(C_COMPILER) examples/quickstart/build/fixture.mid --zones tools/fixtures/c_fixture.zones \
+	"$$task_tmp/fixture.afb" "$$task_tmp/fixture.afx" && driver/build/afx_validate "$$task_tmp/fixture.afx"
 	python3 tools/test_afx_adpcm.py
 	python3 tools/test_afx_midi.py
 	python3 tools/test_afx_perf.py
