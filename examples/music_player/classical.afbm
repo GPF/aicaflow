@@ -10,10 +10,10 @@ map * 0 42 cello 0 42 auto
 
 # Per-work banks make lossless PCM16 affordable. DSP routing belongs in the
 # matching .afp profile, not in this sample-selection map.
-map chopin-op28-no20 0 0 piano 0 0 @PIANO_FORMAT@
+map chopin-op27-no1 0 0 piano 0 0 @PIANO_FORMAT@
 map bach-bwv1007-prelude 0 42 cello 0 42 @CELLO_FORMAT@
 map grieg-mountain-king 0 0 piano 0 0 @PIANO_FORMAT@
 
-song chopin-op28-no20 ../sources/chopin-op28-no20.mid
+song chopin-op27-no1 ../sources/chopin-op27-no1.mid
 song bach-bwv1007-prelude ../sources/bach-bwv1007-prelude.mid
 song grieg-mountain-king ../sources/grieg-mountain-king.mid

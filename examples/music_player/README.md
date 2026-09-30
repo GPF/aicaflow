@@ -2,11 +2,11 @@
 
 This enDjinn player builds and plays three complete classical works:
 
-- Frédéric Chopin — *Prelude in C minor*, Op. 28 No. 20;
+- Frédéric Chopin — *Nocturne in C-sharp minor*, Op. 27 No. 1;
 - J. S. Bach — *Cello Suite No. 1, Prelude*, BWV 1007;
 - Edvard Grieg — *In the Hall of the Mountain King*, Op. 46 No. 4.
 
-Each public-domain score is compiled to its own AFB, then to a small
+Each score is compiled to its own AFB, then to a small
 bank-bound AFX control flow with optional SH4-only AFC seek indexes, AFV
 spectrum sidecars, and both compact and named AFI SH4 sample catalogs. This
 makes PCM16 affordable for all three works while only one bank is resident at a
@@ -72,9 +72,12 @@ PCM8 or ADPCM per declared MIDI-program mapping and can be extended with
 additional SoundFont sources. `profiles/*.afp` are generated from the pinned
 base AFX files and are deliberately checked in, so an accidental change to a
 score, SoundFont or compiler is caught during a reproducible build.
-Mutopia marks the selected
-[Chopin](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=472),
-[Bach](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=517) and
+The Chopin composition is public domain; this particular MIDI performance is
+credited to Bernd Krueger and licensed under
+[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), as recorded
+by [its source listing](https://piano.center/midi/nocturne-op-27-no-1-in-c-sharp-minor).
+It is fetched from a pinned mirror of that performance. Mutopia marks the
+selected [Bach](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=517) and
 [Grieg](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1888) scores
 as public domain. GeneralUser is an external input with its
 [own licence](https://github.com/ad-si/GeneralUser/blob/master/LICENSE.txt);

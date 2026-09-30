@@ -1,6 +1,6 @@
 include ../../third_party/enDjinn/base_link.mk
 
-SOURCES := sources/chopin-op28-no20.mid sources/bach-bwv1007-prelude.mid \
+SOURCES := sources/chopin-op27-no1.mid sources/bach-bwv1007-prelude.mid \
 	sources/grieg-mountain-king.mid
 DEFAULT_SOUNDFONT := sources/GeneralUser.sf2
 PIANO_SOUNDFONT ?= $(DEFAULT_SOUNDFONT)
@@ -15,9 +15,9 @@ ASSET_DIR := build/assets
 BASE_DIR := build/base
 MAP := build/classical.afbm
 ASSET_STAMP := $(ASSET_DIR)/.prepared
-PROFILES := $(addprefix profiles/,chopin-op28-no20.afp bach-bwv1007-prelude.afp grieg-mountain-king.afp)
-ASSETS := $(addprefix $(ASSET_DIR)/,chopin-op28-no20.afb chopin-op28-no20.afx chopin-op28-no20.afc chopin-op28-no20.afv \
-	chopin-op28-no20.afi chopin-op28-no20.names.afi \
+PROFILES := $(addprefix profiles/,chopin-op27-no1.afp bach-bwv1007-prelude.afp grieg-mountain-king.afp)
+ASSETS := $(addprefix $(ASSET_DIR)/,chopin-op27-no1.afb chopin-op27-no1.afx chopin-op27-no1.afc chopin-op27-no1.afv \
+	chopin-op27-no1.afi chopin-op27-no1.names.afi \
 	bach-bwv1007-prelude.afb bach-bwv1007-prelude.afx bach-bwv1007-prelude.afc bach-bwv1007-prelude.afv \
 	bach-bwv1007-prelude.afi bach-bwv1007-prelude.names.afi \
 	grieg-mountain-king.afb grieg-mountain-king.afx grieg-mountain-king.afc grieg-mountain-king.afv \
@@ -58,7 +58,7 @@ $(MAP): classical.afbm $(SOUNDFONTS)
 $(ASSET_STAMP): Makefile $(MAP) $(PROFILES) $(SOURCES) $(SOUNDFONTS) $(BANK_AUTHOR) $(PROFILE_AUTHOR) ../../tools/author/afx_sample_c.c ../../tools/author/afx_ya2beam.c
 	@mkdir -p $(ASSET_DIR) $(BASE_DIR) build/include
 	$(BANK_AUTHOR) --per-song "$(MAP)" "$(BASE_DIR)"
-	@set -e; for name in chopin-op28-no20 bach-bwv1007-prelude grieg-mountain-king; do \
+	@set -e; for name in chopin-op27-no1 bach-bwv1007-prelude grieg-mountain-king; do \
 		if [ "$(abspath $(PIANO_SOUNDFONT))" = "$(abspath $(DEFAULT_SOUNDFONT))" ] && [ "$(abspath $(CELLO_SOUNDFONT))" = "$(abspath $(DEFAULT_SOUNDFONT))" ]; then \
 			$(PROFILE_AUTHOR) apply "$(BASE_DIR)/$$name.afx" "$(BASE_DIR)/$$name.afc" "profiles/$$name.afp" "$(ASSET_DIR)/$$name.afx" "$(ASSET_DIR)/$$name.afc"; \
 		else cp "$(BASE_DIR)/$$name.afx" "$(BASE_DIR)/$$name.afc" "$(ASSET_DIR)/"; fi; \
@@ -66,7 +66,7 @@ $(ASSET_STAMP): Makefile $(MAP) $(PROFILES) $(SOURCES) $(SOUNDFONTS) $(BANK_AUTH
 	done
 	@set -e; { \
 		printf '%s\n' 'static const struct song { const char *title, *file, *bank, *dsp; bool wraps; uint32_t bytes, sample_bytes, stream_bytes, setup_bytes, padding_bytes, command_baseline_bytes, note_count; uint16_t sample_count, setup_count, tempo; uint8_t channel_count; } songs[] = {'; \
-		for entry in 'chopin-op28-no20|Chopin - Prelude Op. 28 No. 20' 'bach-bwv1007-prelude|Bach - Cello Suite 1 Prelude' 'grieg-mountain-king|Grieg - Hall of the Mountain King'; do \
+		for entry in 'chopin-op27-no1|Chopin - Nocturne Op. 27 No. 1' 'bach-bwv1007-prelude|Bach - Cello Suite 1 Prelude' 'grieg-mountain-king|Grieg - Hall of the Mountain King'; do \
 			name=$${entry%%|*}; title=$${entry#*|}; set -- $$($(AUTHOR) --summary "$(ASSET_DIR)/$$name.afb" "$(ASSET_DIR)/$$name.afx"); \
 			bytes=$$1; samples=$$2; stream=$$3; setup=$$4; notes=$$5; setups=$$6; channels=$$7; \
 			if [ "$(abspath $(PIANO_SOUNDFONT))" = "$(abspath $(DEFAULT_SOUNDFONT))" ] && [ "$(abspath $(CELLO_SOUNDFONT))" = "$(abspath $(DEFAULT_SOUNDFONT))" ]; then set -- $$($(PROFILE_AUTHOR) describe "$(BASE_DIR)/$$name.afx" "profiles/$$name.afp"); else set -- dry 0 256; fi; dsp=$$1; tempo=$$3; \
@@ -102,7 +102,7 @@ $(ENJ_BINDIR)/$(ENJ_BASENAME).cdi: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf $(DISC_STAM
 .PHONY: assets fetch-assets check
 
 check: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf $(DISC_STAMP) ../../driver/build/afx_validate
-	@for name in chopin-op28-no20 bach-bwv1007-prelude grieg-mountain-king; do \
+	@for name in chopin-op27-no1 bach-bwv1007-prelude grieg-mountain-king; do \
 		for extension in afb afx afc afv afi names.afi; do test -s "$(ASSET_DIR)/$$name.$$extension"; done; \
 	done
 	@for flow in $(ASSET_DIR)/*.afx; do ../../driver/build/afx_validate "$$flow"; done
