@@ -2,7 +2,7 @@
 
 Code is MIT unless a file says otherwise.
 
-- `tools/afx_ya2beam.c` is a CC0-derived full-buffer AICA-ADPCM encoder. It
+- `tools/author/afx_ya2beam.c` is a CC0-derived full-buffer AICA-ADPCM encoder. It
   is built locally by the Python compatibility tool when a host C compiler is
   available.
 

@@ -6,7 +6,7 @@ smoke: build/test_protocol build/test_bank build/test_dsp build/afx_validate
 	./build/test_dsp
 
 check: smoke
-	@set -e; cd ..; for test in $(notdir $(sort $(wildcard ../tools/test_*.py))); do python3 tools/$$test; done
+	@set -e; cd ..; for test in $(notdir $(sort $(wildcard ../tools/test/test_*.py))); do PYTHONPATH=tools/research:tools/tuner python3 tools/test/$$test; done
 
 build/test_protocol: tests/test_protocol.c common/codec.c include/aicaflow/codec.h include/aicaflow/protocol.h
 	mkdir -p build
@@ -20,9 +20,9 @@ build/test_dsp: tests/test_dsp.c sh4/src/dsp.c sh4/include/aicaflow/dsp.h includ
 	mkdir -p build
 	$(CC) $(CFLAGS) -Ish4/include -Iinclude tests/test_dsp.c sh4/src/dsp.c -lm -o $@
 
-build/afx_validate: ../tools/afx_validate.c common/codec.c include/aicaflow/codec.h include/aicaflow/protocol.h
+build/afx_validate: ../tools/author/afx_validate.c common/codec.c include/aicaflow/codec.h include/aicaflow/protocol.h
 	mkdir -p build
-	$(CC) $(CFLAGS) -Iinclude ../tools/afx_validate.c common/codec.c -o $@
+	$(CC) $(CFLAGS) -Iinclude ../tools/author/afx_validate.c common/codec.c -o $@
 
 layout: build/test_protocol
 	$(MAKE) -C arm7

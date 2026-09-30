@@ -12,16 +12,8 @@ extern "C" {
 /* AFB is deliberately just an identity and one contiguous sample payload.
  * Sample descriptions belong to the offline authoring tool: an AFX setup has
  * the AICA register values and a bank-relative byte address already. */
-#define AFX_BANK_MAGIC 0x00424641u /* "AFB\\0" in little-endian byte order. */
-#define AFX_BANK_VERSION 1u
-#define AFX_BANK_HEADER_BYTES 32u
-
 /* AFC is a host-only seek index. Its payload is never uploaded to AICA or
  * interpreted by ARM7; it is tied to the exact ABI-7 control_id and AFB id. */
-#define AFX_SEEK_MAGIC 0x00434641u /* "AFC\\0" in little-endian byte order. */
-#define AFX_SEEK_VERSION 1u
-#define AFX_SEEK_HEADER_BYTES 32u
-
 typedef struct {
     uint32_t low, high;
 } afx_bank_id_t;

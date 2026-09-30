@@ -2,14 +2,13 @@
 
 AICAflow runs prepared AFB/AFX assets on Dreamcast AICA hardware.  The package
 includes a verified ARM7 firmware image, so normal example builds need only a
-KallistiOS SH4 environment, Python 3 and the Python packages `mido` and
-`sf2utils`.
+KallistiOS SH4 environment and standard host utilities (`cc`, `curl`, `unzip`
+and a SHA-256 command).
 
 ```sh
 git clone --recurse-submodules https://github.com/dfchil/aicaflow.git
 cd aicaflow
 source /opt/toolchains/dc/kos/environ.sh
-python3 -m pip install mido sf2utils
 make examples
 ```
 

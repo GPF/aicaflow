@@ -38,7 +38,7 @@ enum { TUNER_PING = 1, TUNER_UPLOAD, TUNER_PLAY, TUNER_STOP, TUNER_PATCH,
 
 
 static const uint8_t firmware[] = {
-#embed "../../firmware/aicaflow.drv"
+#embed "../../../firmware/aicaflow.drv"
 };
 static terminal_buffer_t terminal;
 static int exiting;

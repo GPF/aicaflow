@@ -13,8 +13,11 @@ the AFX's bank-relative addresses before activation.
   uploaded to Dreamcast.
 - `.afi` — optional offline AFB sample-offset index; it is not needed to play
   an AFX and is never sent to ARM7.
+- `.afbm` — editable offline bank map: SoundFont sources, MIDI-program to SF2
+  preset mappings, their coding policy, and the MIDI flows to build. It
+  produces one AFB and matching AFX/AFC/AFV files; it is never sent to ARM7.
 
-AFB and AFX headers are little-endian and their fixed layouts are defined by
-`driver/sh4/include/aicaflow/bank.h` and `driver/include/aicaflow/codec.h`.
+AFB/AFC identity headers and the AFX wire layout are little-endian and defined
+by `driver/include/aicaflow/protocol.h` and `driver/include/aicaflow/codec.h`.
 The AFB header is 32 bytes. AFX files never embed samples, and AFB files have no
 runtime sample-name or sample-index table.

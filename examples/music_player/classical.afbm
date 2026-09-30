@@ -1,0 +1,12 @@
+# A shared bank assembled from all three scores. Add another `source` before
+# the maps, then point a MIDI program at its desired SF2 preset to combine
+# sound libraries without adding a runtime bank type.
+source generaluser sources/GeneralUser.sf2
+
+# map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <format>
+map * 0 0 generaluser 0 0 auto
+map * 0 42 generaluser 0 42 auto
+
+song chopin-op28-no20 sources/chopin-op28-no20.mid
+song bach-bwv1007-prelude sources/bach-bwv1007-prelude.mid
+song grieg-mountain-king sources/grieg-mountain-king.mid

@@ -113,6 +113,15 @@ enum { AFX_LANE_GAIN, AFX_LANE_MUTE, AFX_LANE_PAN, AFX_LANE_DSP_SEND,
 #define AFX_METADATA_MAGIC 0x314d5841u
 #define AFX_CONTAINER_VERSION 1u
 #define AFX_FILE_VERSION 7u /* Bank-bound, sample-free AFX container. */
+/* AFB and AFC both have a fixed 32-byte little-endian header. They are
+ * format constants, not SH4 implementation details: offline C authoring
+ * tools and the host loader must agree on them. */
+#define AFX_BANK_MAGIC 0x00424641u /* "AFB\\0" in little-endian byte order. */
+#define AFX_BANK_VERSION 1u
+#define AFX_BANK_HEADER_BYTES 32u
+#define AFX_SEEK_MAGIC 0x00434641u /* "AFC\\0" in little-endian byte order. */
+#define AFX_SEEK_VERSION 1u
+#define AFX_SEEK_HEADER_BYTES 32u
 enum { AFX_PCM16 = 0, AFX_PCM8 = 1, AFX_ADPCM = 2 };
 enum { AFX_CAP_BOOTSTRAP = 1, AFX_CAP_LIFECYCLE = 2, AFX_CAP_PLAYBACK = 4, AFX_CAP_DSP = 8 };
 

@@ -4,6 +4,6 @@
 #define PLAYER_SONG_ROWS 2
 #define PLAYER_SELFTEST_CASES {0}
 #define PLAYER_SELFTEST_EXIT_SONG 0
-#define PLAYER_SONG_BANK_FILE(index) songs[(index)].bank
+#define PLAYER_SHARED_BANK_FILE "classical.afb"
 #define PLAYER_LIST_HEADING "AFB + AFX KiB"
 #include "../player.c"

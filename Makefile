@@ -2,15 +2,17 @@ SHELL := /bin/bash
 
 KOS_ENV ?= /opt/toolchains/dc/kos/environ.sh
 EXAMPLES := quickstart dsp_demo dynamic_sfx dsp_effects_player music_player
-TOOLS := tuner_server
+TOOLS := tuner/server
 C_COMPILER := build/afx_compile_c
 C_COMPILER_TEST := build/test_afx_compile_c
+DEMO_ASSETS := build/afx_demo_assets
+BANK_COMPILER := build/afx_bank_c
 
 .PHONY: all examples tools check compiler firmware firmware-check clean
 
 all: examples tools
 
-compiler: $(C_COMPILER)
+compiler: $(C_COMPILER) $(DEMO_ASSETS) $(BANK_COMPILER)
 
 examples:
 	@for example in $(EXAMPLES); do \
@@ -26,21 +28,30 @@ check: $(C_COMPILER) $(C_COMPILER_TEST)
 	$(MAKE) -C driver smoke
 	./$(C_COMPILER_TEST)
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; \
-	./$(C_COMPILER) examples/quickstart/build/fixture.mid --zones tools/fixtures/c_fixture.zones \
+	python3 tools/research/make_fixture_midi.py "$$task_tmp/fixture.mid" && \
+	./$(C_COMPILER) "$$task_tmp/fixture.mid" --zones tools/test/fixtures/c_fixture.zones \
 	"$$task_tmp/fixture.afb" "$$task_tmp/fixture.afx" && driver/build/afx_validate "$$task_tmp/fixture.afx"
-	python3 tools/test_afx_adpcm.py
-	python3 tools/test_afx_midi.py
-	python3 tools/test_afx_perf.py
-	python3 tools/test_afx_sf2.py
-	python3 tools/test_make_fixture_midi.py
+	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_adpcm.py
+	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_midi.py
+	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_perf.py
+	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_afx_sf2.py
+	PYTHONPATH=tools/research:tools/tuner python3 tools/test/test_make_fixture_midi.py
 
-$(C_COMPILER): tools/afx_compile_c.c tools/afx_compile_c.h tools/afx_compile_c_cli.c tools/afx_midi_c.c tools/afx_midi_c.h driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
+$(C_COMPILER): tools/author/afx_compile_c.c tools/author/afx_compile_c.h tools/author/afx_compile_c_cli.c tools/author/afx_midi_c.c tools/author/afx_midi_c.h tools/author/afx_sample_c.c tools/author/afx_sample_c.h tools/author/afx_sf2_c.c tools/author/afx_sf2_c.h tools/author/afx_ya2beam.c driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build
-	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/afx_compile_c.c tools/afx_midi_c.c tools/afx_compile_c_cli.c -lm -o $@
+	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_compile_c.c tools/author/afx_midi_c.c tools/author/afx_sample_c.c tools/author/afx_sf2_c.c tools/author/afx_ya2beam.c tools/author/afx_compile_c_cli.c -lm -o $@
 
-$(C_COMPILER_TEST): tools/afx_compile_c.c tools/afx_compile_c.h tools/afx_midi_c.c tools/afx_midi_c.h tools/test_afx_compile_c.c driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
+$(C_COMPILER_TEST): tools/author/afx_compile_c.c tools/author/afx_compile_c.h tools/author/afx_midi_c.c tools/author/afx_midi_c.h tools/author/afx_sample_c.c tools/author/afx_sample_c.h tools/author/afx_ya2beam.c tools/test/test_afx_compile_c.c driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build
-	clang -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -Idriver/include tools/afx_compile_c.c tools/afx_midi_c.c tools/test_afx_compile_c.c driver/common/codec.c -lm -o $@
+	clang -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -Idriver/include -Itools/author tools/author/afx_compile_c.c tools/author/afx_midi_c.c tools/author/afx_sample_c.c tools/author/afx_ya2beam.c tools/test/test_afx_compile_c.c driver/common/codec.c -lm -o $@
+
+$(DEMO_ASSETS): tools/author/afx_demo_assets.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h driver/include/aicaflow/protocol.h
+	mkdir -p build
+	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_demo_assets.c tools/author/afx_compile_c.c -lm -o $@
+
+$(BANK_COMPILER): tools/author/afx_bank_c.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h tools/author/afx_midi_c.c tools/author/afx_midi_c.h tools/author/afx_sample_c.c tools/author/afx_sample_c.h tools/author/afx_sf2_c.c tools/author/afx_sf2_c.h tools/author/afx_ya2beam.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
+	mkdir -p build
+	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_bank_c.c tools/author/afx_compile_c.c tools/author/afx_midi_c.c tools/author/afx_sample_c.c tools/author/afx_sf2_c.c tools/author/afx_ya2beam.c -lm -o $@
 
 firmware:
 	source $(KOS_ENV) && $(MAKE) -C driver/arm7
@@ -54,4 +65,4 @@ clean:
 	@for example in $(EXAMPLES); do $(MAKE) -C examples/$$example clean; done
 	@for tool in $(TOOLS); do $(MAKE) -C tools/$$tool clean; done
 	$(MAKE) -C driver clean
-	rm -f $(C_COMPILER) $(C_COMPILER_TEST)
+	rm -f $(C_COMPILER) $(C_COMPILER_TEST) $(DEMO_ASSETS) $(BANK_COMPILER)

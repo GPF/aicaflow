@@ -19,13 +19,17 @@ executor and SH4-side resource ownership.
 git clone --recurse-submodules https://github.com/dfchil/aicaflow.git
 cd aicaflow
 source /opt/toolchains/dc/kos/environ.sh
-python3 -m pip install mido sf2utils
 make examples
 ```
 
 The checked-in firmware means this needs no ARM7 compiler. Run `make check` for
 host validation; maintainers with the ARM toolchain run `make firmware-check`
 to reproduce the release image.
+
+`make compiler` builds the native C authoring tools. They emit AFB, AFX, AFC
+and AFV from MIDI plus raw PCM zones or an SF2; `afx_bank_c` builds one shared
+AFB for a declared list of songs. Python lives only in `tools/research` and
+`tools/test` as optional reference tooling.
 
 ## Included examples
 
@@ -35,7 +39,7 @@ to reproduce the release image.
 - `dynamic_sfx` — SH4-controlled pitch, position and intensity changes.
 - `music_player` — three reproducibly fetched classical MIDI/SoundFont demonstrations.
 
-The persistent BBA tuner is a development tool at `tools/tuner_server`; build
+The persistent BBA tuner is a development tool at `tools/tuner/server`; build
 it with `make tools`.
 
 Interactive examples use the pinned `third_party/enDjinn` submodule. The core

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Small transport-free check for bounded tuner upload framing."""
 
-import afx_tuner_client as client
+import client
 import struct
 import subprocess
 import sys
@@ -46,7 +46,7 @@ for invalid, expected in ((b"", "truncated"),
 with tempfile.TemporaryDirectory() as temporary:
     old_abi = Path(temporary) / "old.afx"
     old_abi.write_bytes(struct.pack("<III", client.AFX_MAGIC, 2, 80) + bytes(68))
-    rejected = subprocess.run([sys.executable, str(Path(__file__).with_name("afx_tuner_client.py")),
+    rejected = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / "tuner/client.py"),
                                "control-upload-play", "--file", str(old_abi)], text=True, capture_output=True)
     assert rejected.returncode == 2 and "ABI 2 is incompatible" in rejected.stderr
 
