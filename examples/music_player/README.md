@@ -25,12 +25,44 @@ make -C examples/music_player
 
 `GeneralUser.sf2` is fetched from its public upstream mirror and is only an
 input dependency; the generated AFB files contain only samples selected by the
-three MIDI files. To choose another General-MIDI SoundFont, keep the standard
-piano preset `0:0` and cello preset `0:42`, then override it during the build:
+three MIDI files. The map deliberately has separate piano and cello sources.
+Thus a focused, better piano SF2 can improve Chopin and Grieg without claiming
+that it is also a cello library:
 
 ```sh
-make -C examples/music_player SOUNDFONT=/path/to/your.sf2
+make -C examples/music_player \
+  PIANO_SOUNDFONT=/path/to/piano.sf2 \
+  CELLO_SOUNDFONT=/path/to/cello.sf2
 ```
+
+Either override may be used on its own. An alternate source deliberately
+bypasses the checked-in `.afp` profiles: their hashes bind them to the default
+generated AFX files. It therefore gives a dry, authored-tempo comparison build
+rather than silently applying a profile to different sample/setup data. Rebuild
+with the default sources to restore the tracked performance profiles.
+
+For a piano-only audition, Salamander Grand Piano is a high-detail source, but
+the full public-domain SF2 is about 1.27 GB and so is intentionally not fetched
+by this example. Point `PIANO_SOUNDFONT` at a locally obtained copy. The smaller
+Salamander C5 Light SF2 is suitable for personal listening but has a
+personal-use licence, so it is likewise not a project dependency. Choose a
+separately licensed cello SF2 for `CELLO_SOUNDFONT`; the map can combine the two
+without any runtime change.
+
+Those banks have much longer, layered piano recordings than fit as PCM16 in
+AICA RAM. The C5 Light comparison fits as PCM8 while retaining its source
+layers:
+
+```sh
+make -C examples/music_player \
+  PIANO_SOUNDFONT=sources/SalC5Light2.sf2 PIANO_FORMAT=pcm8 PIANO_CHANNEL=left
+```
+
+`PIANO_FORMAT` and `CELLO_FORMAT` are passed directly to their respective
+`.afbm` mappings and accept `pcm16`, `pcm8`, `adpcm`, or `auto`.
+`PIANO_CHANNEL`/`CELLO_CHANNEL` default to `stereo`; `left` or `right` select
+one side of a linked stereo pair and centre it on AICA, halving the paired
+sample memory when a detailed source would otherwise not fit.
 
 The POSIX-shell downloader verifies SHA-256 for every input. The native C
 authoring tool resolves MIDI program/bank changes through the selected SF2,

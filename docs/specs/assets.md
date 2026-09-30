@@ -155,7 +155,7 @@ one bank binding per generated flow:
 
 ```text
 source gm        soundfonts/GeneralUser.sf2
-source orchestra soundfonts/orchestra.sf2
+source orchestra soundfonts/orchestra.sf2 stereo
 
 # map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <format>
 map * 0 0  gm        0 0  auto
@@ -165,13 +165,19 @@ song title_theme midi/title_theme.mid
 song field_theme midi/field_theme.mid
 ```
 
-`source` names an SF2 input. `map` routes a MIDI bank/program to an SF2 preset
-and chooses `pcm16`, `pcm8`, `adpcm` or `auto`; a song-specific map overrides
-`*`. `song` selects the MIDI sources. `auto` uses the deterministic offline
-quality gate and conservatively avoids ADPCM for looped sources. The bank
-builder writes the shared `.afb` plus one `.afx`, `.afc` and `.afv` for each
-song. `--create-map` creates an editable starting AFBM from an SF2 and MIDI
-files.
+`source` names an SF2 input and may end with `stereo` (the default), `left`,
+or `right`. The latter two select one linked side and centre it on AICA, which
+is useful when a detailed stereo library will not fit in RAM. `map` routes a
+MIDI bank/program to an SF2 preset and chooses `pcm16`, `pcm8`, `adpcm` or
+`auto`; a song-specific map overrides `*`. `song` selects the MIDI sources.
+`auto` uses the deterministic offline quality gate and conservatively avoids
+ADPCM for looped sources. The bank builder writes the shared `.afb` plus one
+`.afx`, `.afc` and `.afv` for each song. `--create-map` creates an editable
+starting AFBM from an SF2 and MIDI files.
+
+The native import path lowers static SF2 envelope, attenuation, pan,
+reverb-send and filter controls into the existing AICA setup words and NOTE
+levels. AFX never embeds SF2 data or a generic modulator interpreter.
 
 ## AFI — SH4 sample catalog
 

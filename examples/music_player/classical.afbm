@@ -1,18 +1,19 @@
 # A shared bank assembled from all three scores. Add another `source` before
 # the maps, then point a MIDI program at its desired SF2 preset to combine
 # sound libraries without adding a runtime bank type.
-source generaluser sources/GeneralUser.sf2
+source piano @PIANO_SOUNDFONT@ @PIANO_CHANNEL@
+source cello @CELLO_SOUNDFONT@ @CELLO_CHANNEL@
 
 # map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <format>
-map * 0 0 generaluser 0 0 auto
-map * 0 42 generaluser 0 42 auto
+map * 0 0 piano 0 0 auto
+map * 0 42 cello 0 42 auto
 
 # Per-work banks make lossless PCM16 affordable. DSP routing belongs in the
 # matching .afp profile, not in this sample-selection map.
-map chopin-op28-no20 0 0 generaluser 0 0 pcm16
-map bach-bwv1007-prelude 0 42 generaluser 0 42 pcm16
-map grieg-mountain-king 0 0 generaluser 0 0 pcm16
+map chopin-op28-no20 0 0 piano 0 0 @PIANO_FORMAT@
+map bach-bwv1007-prelude 0 42 cello 0 42 @CELLO_FORMAT@
+map grieg-mountain-king 0 0 piano 0 0 @PIANO_FORMAT@
 
-song chopin-op28-no20 sources/chopin-op28-no20.mid
-song bach-bwv1007-prelude sources/bach-bwv1007-prelude.mid
-song grieg-mountain-king sources/grieg-mountain-king.mid
+song chopin-op28-no20 ../sources/chopin-op28-no20.mid
+song bach-bwv1007-prelude ../sources/bach-bwv1007-prelude.mid
+song grieg-mountain-king ../sources/grieg-mountain-king.mid

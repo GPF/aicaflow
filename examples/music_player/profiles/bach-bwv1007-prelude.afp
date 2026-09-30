@@ -3,7 +3,7 @@
   "version": 3,
   "base": {
     "afx_version": 7,
-    "canonical_sha256": "e5be7bc213ce728a7dd77c1a124bbf412d801852f2f19b91cf2c68878155ab61"
+    "canonical_sha256": "30837e1fcc0e45e64d2fb2045fe269e12023eab09c7dfa2bfda4cacac0a7941a"
   },
   "dsp": { "preset": "room_warm" },
   "tempo_q8_8": 220,
