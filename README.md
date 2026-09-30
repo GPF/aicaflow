@@ -33,10 +33,14 @@ to reproduce the release image.
 - `dsp_demo` — runtime DSP program construction in C.
 - `dsp_effects_player` — interactive DSP-preset audition player.
 - `dynamic_sfx` — SH4-controlled pitch, position and intensity changes.
-- `tuner_server` — persistent BBA development target.
+- `music_player` — three reproducibly fetched classical MIDI/SoundFont demonstrations.
+
+The persistent BBA tuner is a development tool at `tools/tuner_server`; build
+it with `make tools`.
 
 Interactive examples use the pinned `third_party/enDjinn` submodule. The core
-driver does not.
+driver does not. `music_player` downloads its declared MIDI and SoundFont
+inputs on its first build; see its README to supply a different SoundFont.
 
 ## Documentation
 

@@ -1,19 +1,25 @@
 SHELL := /bin/bash
 
 KOS_ENV ?= /opt/toolchains/dc/kos/environ.sh
-EXAMPLES := quickstart dsp_demo dynamic_sfx tuner_server dsp_effects_player
+EXAMPLES := quickstart dsp_demo dynamic_sfx dsp_effects_player music_player
+TOOLS := tuner_server
 C_COMPILER := build/afx_compile_c
 C_COMPILER_TEST := build/test_afx_compile_c
 
-.PHONY: all examples check compiler firmware firmware-check clean
+.PHONY: all examples tools check compiler firmware firmware-check clean
 
-all: examples
+all: examples tools
 
 compiler: $(C_COMPILER)
 
 examples:
 	@for example in $(EXAMPLES); do \
 		source $(KOS_ENV) && $(MAKE) -C examples/$$example || exit $$?; \
+	done
+
+tools:
+	@for tool in $(TOOLS); do \
+		source $(KOS_ENV) && $(MAKE) -C tools/$$tool || exit $$?; \
 	done
 
 check: $(C_COMPILER) $(C_COMPILER_TEST)
@@ -46,5 +52,6 @@ firmware-check: firmware
 
 clean:
 	@for example in $(EXAMPLES); do $(MAKE) -C examples/$$example clean; done
+	@for tool in $(TOOLS); do $(MAKE) -C tools/$$tool clean; done
 	$(MAKE) -C driver clean
 	rm -f $(C_COMPILER) $(C_COMPILER_TEST)

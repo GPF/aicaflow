@@ -17,5 +17,9 @@ make examples
 runtime and does not require an ARM7 compiler.  Maintainers with the full KOS
 toolchain can regenerate and verify it with `make firmware-check`.
 
+`examples/music_player` fetches three pinned public score inputs and the
+GeneralUser SoundFont when it is first built. Its README describes the exact
+sources and the `SOUNDFONT=/path/to/file.sf2` override.
+
 The `third_party/enDjinn` submodule is used only by the interactive examples.
 The driver itself has no enDjinn dependency.

@@ -12,9 +12,6 @@
 build/
 bin/
 cdrom/
-examples/*/build/
-examples/*/bin/
-examples/*/cdrom/
 /examples/nocturne_player/include/songs.h
 
 # Locally retained source media and research; keep large assets out of Git.
@@ -33,6 +30,8 @@ examples/enj_reverb_lab_source/
 examples/enj_reverb_lab_source.tar.gz
 examples/dsp_effects_player/sources/*
 !examples/dsp_effects_player/sources/*.md
+examples/music_player/assets/
+examples/music_player/sources/
 examples/megadrive/
 
 # Local extraction scratch data from owned game images/ROMs; never commit.
