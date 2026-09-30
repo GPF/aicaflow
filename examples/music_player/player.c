@@ -32,7 +32,7 @@
 #error "PLAYER_SELFTEST_EXIT_SONG is required"
 #endif
 #ifndef PLAYER_SONG_ROWS
-#define PLAYER_SONG_ROWS 21
+#define PLAYER_SONG_ROWS 24
 #endif
 #ifndef PLAYER_EXPECTED_SONGS
 #error "PLAYER_EXPECTED_SONGS is required"
@@ -70,12 +70,13 @@ static size_t visual_loading_size, visual_loading_bytes;
 static uint8_t spectrum_bars[32];
 static uint32_t spectrum_frame = UINT32_MAX;
 
-enum { SONG_COUNT = sizeof(songs) / sizeof(*songs), SONG_ROWS = PLAYER_SONG_ROWS,
+enum { SONG_COUNT = sizeof(songs) / sizeof(*songs),
+       SONG_ROWS = SONG_COUNT < PLAYER_SONG_ROWS ? SONG_COUNT : PLAYER_SONG_ROWS,
        VISUAL_HEADER_BYTES = 12, VISUAL_BANDS = 32, VISUAL_RATE = 60,
        SPECTRUM_X = 350, SPECTRUM_TOP = 3, SPECTRUM_HEIGHT = 19,
        SPECTRUM_SUBLEVELS = 4, SPECTRUM_DECAY = 5, VISUAL_READ_BYTES = 32768,
        TRIGGER_PRESSED = 128 };
-_Static_assert(SONG_COUNT == PLAYER_EXPECTED_SONGS && SONG_ROWS < SONG_COUNT, "playlist layout");
+_Static_assert(SONG_COUNT == PLAYER_EXPECTED_SONGS && SONG_ROWS > 0, "playlist layout");
 
 static void visual_cancel(void);
 static void update(void *unused);
