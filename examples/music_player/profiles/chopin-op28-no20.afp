@@ -3,7 +3,7 @@
   "version": 2,
   "base": {
     "afx_version": 7,
-    "canonical_sha256": "f4ac2641157e05a56d07ae3242bc82ff96366c085c7005638104e70c91da52f8"
+    "canonical_sha256": "07c9231273de54b21514810381dac824b6e446409fdb8adda50a90fd92573f6b"
   },
   "dsp": { "preset": "dry" },
   "defaults": {},
