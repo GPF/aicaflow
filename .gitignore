@@ -1,0 +1,44 @@
+.DS_Store
+
+# Build outputs
+*.o
+*.elf
+*.bin
+*.cdi
+*.iso
+*.map
+
+# Local build trees
+build/
+bin/
+cdrom/
+examples/*/build/
+examples/*/bin/
+examples/*/cdrom/
+/examples/nocturne_player/include/songs.h
+
+# Locally retained source media and research; keep large assets out of Git.
+sources/*
+!sources/legacy/
+sources/legacy/*
+!sources/legacy/README.md
+!sources/legacy/migration-manifest.json
+
+# Local source packs, project files and hardware evidence are not release data.
+Daytona_USA_(Sega_Model_2)/
+Daytona_USA_(Sega_Model_2).zip
+hardware_results/
+projects/
+examples/enj_reverb_lab_source/
+examples/enj_reverb_lab_source.tar.gz
+examples/dsp_effects_player/sources/*
+!examples/dsp_effects_player/sources/*.md
+examples/megadrive/
+
+# Local extraction scratch data from owned game images/ROMs; never commit.
+local_extract/
+
+# Tool/runtime scratch
+__pycache__/
+tools/__pycache__/
+/driver/sh4/libaicaflow_host.a

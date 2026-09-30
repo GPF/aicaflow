@@ -1,0 +1,50 @@
+# AICAflow
+
+AICAflow is a Dreamcast AICA runtime and authoring toolkit. It runs prepared
+AFX control flows against contiguous AFB sample banks with a bounded ARM7
+executor and SH4-side resource ownership.
+
+## Release contract
+
+- One sampled-flow model: one AFB plus one AFX. AFX never embeds samples.
+- One versioned firmware image: `firmware/aicaflow.drv`.
+- ARM7 executes prepared commands only. SH4 owns allocation, bank binding,
+  instances, seeking, dynamic register updates and DSP-scene installation.
+- AFB/AFX validation rejects incompatible banks and malformed relocations
+  before an instance can play.
+
+## Build an example
+
+```sh
+git clone --recurse-submodules https://github.com/dfchil/aicaflow.git
+cd aicaflow
+source /opt/toolchains/dc/kos/environ.sh
+python3 -m pip install mido sf2utils
+make examples
+```
+
+The checked-in firmware means this needs no ARM7 compiler. Run `make check` for
+host validation; maintainers with the ARM toolchain run `make firmware-check`
+to reproduce the release image.
+
+## Included examples
+
+- `quickstart` — minimal generated AFB/AFX playback.
+- `dsp_demo` — runtime DSP program construction in C.
+- `dsp_effects_player` — interactive DSP-preset audition player.
+- `dynamic_sfx` — SH4-controlled pitch, position and intensity changes.
+- `tuner_server` — persistent BBA development target.
+
+Interactive examples use the pinned `third_party/enDjinn` submodule. The core
+driver does not.
+
+## Documentation
+
+Start with [getting started](docs/getting-started.md), then read the
+[integration](docs/integration.md), [lifetime](docs/lifetime.md),
+[format](docs/formats.md), [authoring](docs/authoring.md) and
+[DSP](docs/dsp.md) guides. Asset-specific licensing is in
+[ASSET_LICENSES.md](ASSET_LICENSES.md).
+
+DKR-specific integration, Nintendo 64 importers and other game-derived work
+are intentionally not part of this generic release.
