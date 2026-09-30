@@ -17,4 +17,5 @@ instances. `afx_shutdown()` is only valid after flows, instances and banks have
 been released.
 
 See [lifetime.md](lifetime.md) for the ownership rules and
-[formats.md](formats.md) for the asset contract.
+[Assets and sidecars](specs/assets.md) for the asset contract. See
+[Runtime ABI](specs/runtime.md) for the SH-4/ARM7 boundary.

@@ -92,6 +92,9 @@ gain returns to 255. Re-upload the bank and control flow afterwards. `exit`
 instead terminates the tuner process; it is not the command to use between
 auditions.
 
+The reset covers the complete AICA RAM arena, including any optional DSP delay
+ring. Its fixed and dynamic regions are documented in [Memory layout](memory.md).
+
 ## Protocol boundary
 
 Each request is one TCP connection and has a fixed 16-byte little-endian

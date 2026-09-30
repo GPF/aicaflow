@@ -1,0 +1,25 @@
+# AICAflow documentation
+
+AICAflow separates offline sound authoring from a deliberately small Dreamcast
+runtime. A control flow contains timed AICA register operations; its samples
+live in a separately loaded bank. The SH-4 owns memory, validation, instances,
+seeking, live controls and DSP scenes. The ARM7 firmware only runs bounded,
+already-resolved commands.
+
+## Read by task
+
+- [Getting started](getting-started.md) — build and run the smallest example.
+- [Integration](integration.md) and [lifetime](lifetime.md) — embed the driver
+  safely in a Dreamcast program.
+- [Authoring](authoring.md) — create a bank, flows and sidecars from MIDI,
+  PCM, SoundFonts and an editable bank map.
+- [DSP](dsp.md) — construct and install an AICA DSP program.
+- [Tuner](tuner.md) — use the persistent hardware development server.
+- [Memory layout](memory.md) — ownership and the AICA RAM arena.
+- [Specifications](specs/README.md) — normative binary layouts and wire ABI.
+- [Testing](testing.md) — host and firmware checks.
+
+The source headers remain the numeric authority. In particular,
+[`protocol.h`](../driver/include/aicaflow/protocol.h) defines the ARM7/SH-4
+wire ABI and [`bank.h`](../driver/sh4/include/aicaflow/bank.h) defines the
+bank loader API.

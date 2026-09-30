@@ -18,6 +18,10 @@ reservation. Install a memory-using scene before loading its AFB; an attempted
 ring expansion that would overlap a live bank fails safely. Disabling the
 scene returns that range to the ordinary allocator.
 
+The exact placement of the ring relative to the asset arena, IPC state and
+ARM7 stacks is shown in [Memory layout](memory.md). The runtime ownership
+contract is in [Runtime ABI](specs/runtime.md).
+
 For authored music, keep the scene preset and its DSP-send amount in the
 offline `.afp` profile. The profile rewrite puts the send in the derived AFX;
 the player installs the named scene before loading the matching AFB. Neither

@@ -1,8 +1,11 @@
 # AICAflow
 
-AICAflow is a Dreamcast AICA runtime and authoring toolkit. It runs prepared
-AFX control flows against contiguous AFB sample banks with a bounded ARM7
-executor and SH4-side resource ownership.
+AICAflow is a Dreamcast audio runtime and native authoring toolkit for the
+Yamaha AICA. Offline tools turn MIDI, PCM or SoundFonts into sample banks and
+timed AICA register flows. On Dreamcast, SH-4 code owns AICA RAM, validation,
+bank binding, flow instances, seeking, live parameter changes and DSP scenes;
+the ARM7 firmware is a bounded executor for already-resolved commands. This
+keeps file parsing, sample selection and expensive policy off the audio CPU.
 
 ## Release contract
 
@@ -48,11 +51,11 @@ inputs on its first build; see its README to supply a different SoundFont.
 
 ## Documentation
 
-Start with [getting started](docs/getting-started.md), then read the
-[integration](docs/integration.md), [lifetime](docs/lifetime.md),
-[format](docs/formats.md), [authoring](docs/authoring.md) and
-[DSP](docs/dsp.md) guides. Asset-specific licensing is in
-[ASSET_LICENSES.md](ASSET_LICENSES.md).
+Start with the [documentation index](docs/README.md). It links the getting
+started, integration, authoring, DSP and tuner guides, plus the normative
+[runtime](docs/specs/runtime.md) and [asset/sidecar](docs/specs/assets.md)
+specifications and the [AICA memory layout](docs/memory.md). Asset-specific
+licensing is in [ASSET_LICENSES.md](ASSET_LICENSES.md).
 
 DKR-specific integration, Nintendo 64 importers and other game-derived work
 are intentionally not part of this generic release.
