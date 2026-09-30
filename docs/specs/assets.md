@@ -84,7 +84,10 @@ so applications without seeking do not carry its SH-4 memory cost.
 
 AFV is a compact player asset, not a DSP analysis format. Its `VIZ1` header is
 12 bytes: version, band count, frame rate and frame count. The release compiler
-writes 32 one-byte bands per frame at 60 Hz. A player may omit AFV with no
+writes 32 one-byte bands per frame at 60 Hz from the active notes' pitch,
+authored level and a short visual decay, normalized across the piece's actual
+pitch range. It is deliberately an inexpensive musical-energy animation, not a
+PCM FFT or a measurement of the final DSP mix. A player may omit AFV with no
 effect on audio playback or seeking.
 
 ## AFP — performance profile
