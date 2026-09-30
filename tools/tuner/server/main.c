@@ -32,7 +32,7 @@ enum { TUNER_PING = 1, TUNER_UPLOAD, TUNER_PLAY, TUNER_STOP, TUNER_PATCH,
        TUNER_DSP_ENABLE, TUNER_DSP_DISABLE, TUNER_ASSET_READ, TUNER_PLAY_REGION, TUNER_MESSAGE,
        TUNER_DSP_PROGRAM, TUNER_REGISTER_READ, TUNER_BANK_COMMIT,
        TUNER_CONTROL_COMMIT_PLAY, TUNER_DSP_ROOM, TUNER_LANE_MUTE, TUNER_DSP_RETURNS,
-       TUNER_DSP_PROGRAM_RING, TUNER_SEEK_INDEX_COMMIT_PLAY };
+       TUNER_DSP_PROGRAM_RING, TUNER_SEEK_INDEX_COMMIT_PLAY, TUNER_RESET };
 #define DSP_PROGRAM_BYTES AFX_DSP_PROGRAM_BYTES
 #define TUNER_MAX_ASSET_READ 4096u
 
@@ -331,6 +331,16 @@ static void discard_upload(tuner_state_t *state) {
     state->upload = NULL;
     state->upload_total = state->upload_received = 0;
 }
+/* A reset deliberately restarts the firmware instead of unwinding individual
+ * assets. afx_init clears all AICA RAM, rebuilds the host allocator and starts
+ * with no DSP program, bank, flow, instance or seek state. */
+static int reset_tuner(tuner_state_t *state) {
+    discard_upload(state);
+    afx_shutdown();
+    memset(state, 0, sizeof(*state));
+    state->music_gain = 255;
+    return afx_init(firmware, sizeof(firmware));
+}
 static int handle(int fd, tuner_state_t *state, const uint8_t *header, uint8_t *payload) {
     uint16_t opcode = read16(header + 6);
     uint32_t sequence = read32(header + 8), bytes = read32(header + 12);
@@ -339,9 +349,12 @@ static int handle(int fd, tuner_state_t *state, const uint8_t *header, uint8_t *
     if (opcode == TUNER_PING) {
         if (bytes) result = -AFX_BAD_COMMAND;
         else {
-            write32(status, TUNER_DSP_PROGRAM_RING);
+            write32(status, TUNER_RESET);
             return reply(fd, opcode, sequence, AFX_OK, status, 4);
         }
+    } else if (opcode == TUNER_RESET) {
+        result = bytes ? -AFX_BAD_COMMAND : reset_tuner(state);
+        trace("TUNER reset result=%d", result);
     } else if (opcode == TUNER_UPLOAD_BEGIN) {
         uint32_t total = bytes == 4 ? read32(payload) : 0;
         if (!total || total > TUNER_MAX_UPLOAD) result = -AFX_BAD_BOUNDS;

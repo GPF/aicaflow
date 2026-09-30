@@ -110,7 +110,7 @@ class Socket:
 connections = []
 client.socket.create_connection = lambda *_args, **_kwargs: (connections.append(1) or Socket())
 client.exchange = lambda *_args: (_ for _ in ()).throw(client.socket.timeout())
-for opcode, expected in ((client.PING, 3), (client.STATUS, 3), (client.PLAY, 1),
+for opcode, expected in ((client.PING, 3), (client.STATUS, 3), (client.RESET, 3), (client.PLAY, 1),
                          (client.PATCH, 1), (client.UPLOAD_BEGIN, 3),
                          (client.UPLOAD_CHUNK, 3), (client.EXIT, 1)):
     connections.clear()
@@ -132,7 +132,7 @@ assert requests[-1] == (client.PING, b"")
 assert (client.DSP_ENABLE, client.DSP_DISABLE) == (13, 14)
 assert client.PLAY_REGION == 16
 assert (client.BANK_COMMIT, client.CONTROL_COMMIT_PLAY, client.DSP_ROOM, client.LANE_MUTE, client.DSP_RETURNS,
-        client.SEEK_INDEX_COMMIT_PLAY) == (20, 21, 22, 23, 24, 26)
+        client.SEEK_INDEX_COMMIT_PLAY, client.RESET) == (20, 21, 22, 23, 24, 26, 27)
 for invalid, validator in ((b"", client.validate_bank), (b"AFB0" + bytes(32), client.validate_bank),
                            (b"", client.validate_control), (b"AFC0" + bytes(76), client.validate_control),
                            (b"", client.validate_seek_index), (b"AFC0" + bytes(32), client.validate_seek_index)):
@@ -149,6 +149,12 @@ try:
 finally:
     sys.argv = old_argv
 assert requests[-1] == (client.PLAY_REGION, struct.pack("<II", 12000, 8000))
+sys.argv = ["afx_tuner_client", "reset"]
+try:
+    assert client.main() == 0
+finally:
+    sys.argv = old_argv
+assert requests[-1] == (client.RESET, b"")
 
 print("tuner chunk framing checks passed")
 

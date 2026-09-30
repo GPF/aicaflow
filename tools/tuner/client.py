@@ -13,7 +13,7 @@ MAGIC, VERSION, PORT = 0x31544641, 1, 31337
 AFX_MAGIC, AFX_ABI, AFX_HEADER_BYTES = 0x32584641, 7, 80
 AFB_MAGIC, AFB_VERSION, AFB_HEADER_BYTES = 0x00424641, 1, 32
 AFC_MAGIC, AFC_VERSION, AFC_HEADER_BYTES = 0x00434641, 1, 32
-PING, UPLOAD, PLAY, STOP, PATCH, INSTANCE_GAIN, STATUS, EXIT, UPLOAD_PLAY, UPLOAD_BEGIN, UPLOAD_CHUNK, UPLOAD_COMMIT, DSP_ENABLE, DSP_DISABLE, ASSET_READ, PLAY_REGION, MESSAGE, DSP_PROGRAM, REGISTER_READ, BANK_COMMIT, CONTROL_COMMIT_PLAY, DSP_ROOM, LANE_MUTE, DSP_RETURNS, DSP_PROGRAM_RING, SEEK_INDEX_COMMIT_PLAY = range(1, 27)
+PING, UPLOAD, PLAY, STOP, PATCH, INSTANCE_GAIN, STATUS, EXIT, UPLOAD_PLAY, UPLOAD_BEGIN, UPLOAD_CHUNK, UPLOAD_COMMIT, DSP_ENABLE, DSP_DISABLE, ASSET_READ, PLAY_REGION, MESSAGE, DSP_PROGRAM, REGISTER_READ, BANK_COMMIT, CONTROL_COMMIT_PLAY, DSP_ROOM, LANE_MUTE, DSP_RETURNS, DSP_PROGRAM_RING, SEEK_INDEX_COMMIT_PLAY, RESET = range(1, 28)
 CHUNK_BYTES = 32768
 TCP_WRITE_BYTES = 1024
 
@@ -69,9 +69,9 @@ def session_upload(session: Session, payload: bytes) -> tuple[int, bytes]:
 
 
 def request(host: str, opcode: int, payload: bytes = b"") -> tuple[int, bytes]:
-    # Only observation requests are safe to repeat after a broken connection:
+    # Only observation/reset requests are safe to repeat after a broken connection:
     # the peer may already have performed PLAY/PATCH/EXIT before its reply died.
-    attempts = 3 if opcode in (PING, STATUS, UPLOAD_BEGIN, UPLOAD_CHUNK) else 1
+    attempts = 3 if opcode in (PING, STATUS, UPLOAD_BEGIN, UPLOAD_CHUNK, RESET) else 1
     timeout = max(30, 30 + len(payload) // 10000)
     for attempt in range(attempts):
         try:
@@ -107,8 +107,6 @@ def validate_asset(payload: bytes) -> None:
         raise ValueError("file is not an AFX asset")
     if abi != AFX_ABI:
         raise ValueError(f"AFX ABI {abi} is incompatible with tuner ABI {AFX_ABI}; recompile this project")
-    from afx_metadata import read
-    read(payload)
     if total_size != len(payload):
         raise ValueError(f"AFX header declares {total_size} bytes but file contains {len(payload)}")
 
@@ -171,7 +169,7 @@ def validate_seek_index(payload: bytes) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("ping", "bank-upload", "control-upload-play", "play", "region", "stop", "status", "gain", "patch", "lane-mute", "dsp-enable", "dsp-disable", "dsp-returns", "dsp-room", "asset-read", "message", "exit", "dsp-program", "dsp-program-ring", "dsp-readback", "register-read"))
+    parser.add_argument("command", choices=("ping", "reset", "bank-upload", "control-upload-play", "play", "region", "stop", "status", "gain", "patch", "lane-mute", "dsp-enable", "dsp-disable", "dsp-returns", "dsp-room", "asset-read", "message", "exit", "dsp-program", "dsp-program-ring", "dsp-readback", "register-read"))
     parser.add_argument("--host", default="10.0.0.184")
     parser.add_argument("--file", type=Path, help="AFX/AFB file for upload")
     parser.add_argument("--index", type=Path, help="optional AFC index attached after control upload")
@@ -254,7 +252,7 @@ def main() -> int:
             parser.error("asset-read requires --offset and --bytes 1..4096")
         payload, opcode = struct.pack("<II", args.offset, args.bytes), ASSET_READ
     else:
-        opcode = {"ping": PING, "play": PLAY, "stop": STOP, "status": STATUS, "dsp-enable": DSP_ENABLE,
+        opcode = {"ping": PING, "reset": RESET, "play": PLAY, "stop": STOP, "status": STATUS, "dsp-enable": DSP_ENABLE,
                   "dsp-disable": DSP_DISABLE, "exit": EXIT}[args.command]
     result, data = request(args.host, opcode, payload)
     if args.command in ("dsp-program", "dsp-program-ring", "dsp-readback", "register-read") and result == 0:
