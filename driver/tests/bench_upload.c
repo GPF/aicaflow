@@ -1,5 +1,5 @@
 /* Run with `make -C driver upload-bench` in the KOS environment, then
- * dc-tool-ip -t 10.0.0.184 -x driver/build/bench_upload.elf.
+ * kos-tool -f -t "$DCTOOL_HOST" -x driver/build/bench_upload.elf.
  * Only SH-4 RAM -> AICA RAM is timed: no file I/O, linking or frame waits.
  * DMA includes cache writeback and completion; readback is outside timing.
  * Firmware runs idle throughout. This does not measure concurrent playback. */
