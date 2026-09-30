@@ -16,7 +16,7 @@ already-resolved commands.
 - [DSP](dsp.md) — construct and install an AICA DSP program.
 - [Tuner](tuner.md) — use the persistent hardware development server.
 - [Memory layout](memory.md) — ownership and the AICA RAM arena.
-- [Specifications](specs/README.md) — normative binary layouts and wire ABI.
+- [Specifications](specs/README.md) — assets, bytecode and SH-4/ARM7 wire ABI.
 - [Testing](testing.md) — host and firmware checks.
 
 The source headers remain the numeric authority. In particular,

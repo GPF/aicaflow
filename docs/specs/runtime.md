@@ -25,6 +25,10 @@ The relevant stream operations are `WAIT8`, `WAIT16`, `WAIT32`, `NOTE`,
 must explicitly reach `KEYOFF` then `END`, even if its source sample loops.
 `PARK` is only for a controlled flow that the SH-4 will resume or stop.
 
+[AFX instruction language](instruction-language.md) specifies every opcode,
+field mask, byte layout and stream validation rule. [SH-4 ↔ ARM7 IPC](ipc.md)
+specifies the separate control queue; it is not part of an AFX file.
+
 At upload, the SH-4 validates the AFX and every relocation against the bound
 AFB payload, turns bank-relative addresses into AICA addresses once, and
 submits the resolved image. No per-note lookup happens on ARM7.
