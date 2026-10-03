@@ -39,8 +39,7 @@ a missing or early terminal instruction are rejected.
 | 14 | NOTE_PL | channel:u8 setup:u16 pitch:u16 mix:u16 | 8 | Compact NOTE form: only PITCH and MIX/TOTAL_LEVEL override the setup. |
 | 15 | PATCH_LEVEL | channel:u8 mix:u16 | 4 | Compact PATCH form: only MIX/TOTAL_LEVEL changes. |
 
-NOTE_PL and PATCH_LEVEL are decoded as ordinary NOTE/PATCH operations. They are
-byte-saving encodings, not a second execution model.
+NOTE_PL and PATCH_LEVEL are compact encodings of NOTE and PATCH.
 
 A finite one-shot normally emits NOTE, one or more WAITs, KEYOFF, any intended
 release-tail WAIT, then END. A looping source sample does not make a flow
@@ -70,10 +69,8 @@ The accepted mask is exactly the low 18 bits represented above. A NOTE setup
 index must be below setup_count; channels used by NOTE, PATCH and KEYOFF must
 be below required_channels.
 
-A NOTE starts from its complete immutable setup template, then applies its
-masked values. A PATCH starts from the channel's current state. This makes
-offline lowering deterministic and keeps the ARM7 free of semantic MIDI,
-SoundFont or sample lookup logic.
+A NOTE copies its setup template and applies its masked values. A PATCH
+updates the channel's running register state.
 
 ## Termination and timing constraints
 
@@ -87,6 +84,5 @@ SoundFont or sample lookup logic.
 - The compiler/host calculate burst work between waits and reject a declared
   work profile that disagrees with the stream.
 
-Use afx_encode_event() and afx_decode_event() from
-driver/include/aicaflow/codec.h rather than duplicating this packing in a new
-tool.
+Use `afx_encode_event()` and `afx_decode_event()` from
+[`codec.h`](../../driver/include/aicaflow/codec.h) to encode and decode events.

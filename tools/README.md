@@ -12,7 +12,6 @@
 - `build/afx_n64` — direct B1 ALBank/S1 CSeq music and ALBank SFX chains;
   no MIDI intermediate. SFX emit AFB/AFX; music also emits AFC/AFV.
 - `build/afx_vgm` — Sega MultiPCM VGM/VGZ register captures to AFB/AFX/AFC/AFV.
-  This is not a universal VGM importer or a YM2612/SN76489 synthesizer.
 
 The full workflows, input syntax and sidecar roles are in
 [Authoring](../docs/authoring.md) and
@@ -21,12 +20,11 @@ The full workflows, input syntax and sidecar roles are in
 `afx_bank --create-map` makes an editable AFBM from MIDI/SF2 inputs;
 `--per-song` builds independent banks; `--merge` losslessly deduplicates and
 rebinds already-authored AFB/AFX sets. Only map-based builds emit compact and
-named AFI catalogs. `afx_profile inventory` lists note selectors without
-filling the AFP with redundant notes; `init` creates a compact starting profile.
+named AFI catalogs. `afx_profile inventory` lists note selectors;
+`init` creates a starting profile.
 
-The current `.afsfx` reader is the DKR application's pack orchestrator, not
-`afx_bank` or the runtime. See [SFX bank maps](../docs/specs/afsfx.md) before
-using that extension in another project.
+DKR's pack builder reads `.afsfx` maps and calls the C converter and merger.
+See [SFX bank maps](../docs/specs/afsfx.md).
 
 | Target | Output / requirement |
 | --- | --- |
@@ -36,8 +34,8 @@ using that extension in another project.
 | `make firmware-check` | Rebuilt firmware matched to its manifest; ARM7 toolchain |
 
 `tuner/` contains the resident Dreamcast tuner (`server/`) and its small host
-client (`client.py`). It is a development target, not an application example;
-see [Tuner](../docs/tuner.md) for commands, memory lifetime and reset behavior.
+client (`client.py`). See [Tuner](../docs/tuner.md) for commands, asset lifetime
+and reset behavior.
 
 `author/` is the supported C toolchain; its [README](author/README.md) gives
 command-line recipes. `test/` contains fixtures and checks. `research/`

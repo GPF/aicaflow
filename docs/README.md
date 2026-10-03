@@ -1,7 +1,7 @@
 # AICAflow documentation
 
-AICAflow separates offline sound authoring from a deliberately small Dreamcast
-runtime. A control flow contains timed AICA register operations; its samples
+AICAflow separates offline sound authoring from Dreamcast playback.
+A control flow contains timed AICA register operations; its samples
 live in a separately loaded bank. The SH-4 owns memory, validation, instances,
 seeking, live controls and DSP scenes. The ARM7 firmware only runs bounded,
 already-resolved commands.
@@ -22,13 +22,7 @@ already-resolved commands.
 - [Specifications](specs/README.md) — assets, bytecode and SH-4/ARM7 wire ABI.
 - [Testing](testing.md) — host and firmware checks.
 
-For a human or an LLM editing this project: read the workflow first, then the
-specification for the affected file and the actual parser/API. Examples of
-current limitations: AFBM `source` accepts SF2,
-not standalone PCM; `afx_vgm` accepts MultiPCM, not all VGM chips; and the
-current AFSFX reader is an application script in DKR.
-
-The source headers remain the numeric authority. In particular,
+The source headers define the numeric contract:
 [`protocol.h`](../driver/include/aicaflow/protocol.h) defines the ARM7/SH-4
 wire ABI and [`bank.h`](../driver/sh4/include/aicaflow/bank.h) defines the
 bank loader API.
