@@ -77,8 +77,15 @@ deliver" decision. No PSG offload, no change to blip, bias, clipping, resampling
 ## 5. Risks / unknowns, most important first
 1. **Wake jitter under real load.** Every number so far is an idle SH-4 with a spinning loop. The poll thread competes with
    the core and video threads; KOS timeslice effects are unmeasured. Mitigation: priority, margin instrumentation.
-2. **IRQ blackout from G2 locking.** The cursor read holds `g2_lock` ~60 us; `spu_memload`/`afx_mem_upload` copies ~690 us
-   per 4 KB. Whether IRQs are masked for the whole copy (timer/vblank/maple jitter) was not examined.
+2. **IRQ blackout from G2 locking - audited in KOS source (not hardware-measured).** `g2_lock()` = `irq_disable()` +
+   suspend G2 DMA (SPU, BBA, CH2) + wait for the FIFOs (`g2bus.h`); masked IRQs also stop KOS preemption. But
+   `spu_memload()` (what `afx_mem_upload` uses for aligned data) copies in 32-byte chunks: each does `g2_fifo_wait()` then
+   `g2_write_block_32()`, which takes its own `g2_lock_scoped()` for that burst only (`hardware/spu.c`, `hardware/g2bus.c`).
+   The measured 687 us per 4 KB is ~128 chunks at ~5.4 us, so IRQs are masked for single-digit microseconds at a time and
+   the upload is preemptible at chunk granularity, NOT a 0.7 ms blackout. (`spu_memload_sq` does hold the lock for the whole
+   store-queue copy; AICAflow does not use it.) The one real blackout is our own cursor read: the probe code wraps
+   `g2_lock` around the 50 us settle spin (~60 us masked per poll). That lock is not needed during the spin (single user of
+   the monitor, and a longer delay is harmless): take it for the select write, release, spin, retake for the read.
 3. **Behavior at reset / state load / pause / underrun-recovery** is only partly exercised (underrun recovery was proven
    synthetically, `aica-ring-underrun.md`).
 4. **Build integration:** linking `libaicaflow_host.a`, embedding the firmware without `#embed`, and keeping the audio PMU
@@ -110,7 +117,8 @@ deliver" decision. No PSG offload, no change to blip, bias, clipping, resampling
 4. **Compensation:** delay the earlier (left) voice by |d| samples with a causal carry buffer; keep the startup calibration
    (the offset is 18 or 19 samples depending on the start).
 5. **Service thread:** dedicated thread at 10 ms, higher priority than the core; split the L and R uploads across wakes to
-   avoid a ~1.5 ms contiguous stall - subject to the open `g2_lock()`/IRQ question (s5, item 2).
+   keep each wake short (the stall is CPU time, not an IRQ blackout - see s5 item 2); release `g2_lock` during the cursor
+   settle spin.
 
 ## 8. Phase 1 acceptance (A/B on one mGBADC revision)
 A = KOS `snd_stream`, B = AICAflow ring, same deterministic replay/workload. Compare: replay/state hash unchanged; zero audio
