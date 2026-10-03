@@ -207,6 +207,13 @@ static bool verify_region(uint32_t spu_addr, uint32_t bytes) {
 #ifndef MODE_A_MS
 #define MODE_A_MS 60000
 #endif
+#ifndef MODE_U_ARM_MS
+#define MODE_U_ARM_MS 12000
+#endif
+#ifndef MODE_U_POST_MS
+#define MODE_U_POST_MS 12000
+#endif
+#define MODE_U_MAX_MS 45000
 enum {
     HALF_FRAMES = RING_FRAMES / 2,
     POLL_US = 5000,
@@ -293,9 +300,10 @@ static void dense_window(unsigned ch, uint64_t t_end_us, int idx) {
 }
 #endif
 
-static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
-    printf("MODE_A_BEGIN duration_ms=%d half_frames=%d poll_us=%d late_frames=%d danger_frames=%d\n",
-           MODE_A_MS, HALF_FRAMES, POLL_US, LATE_FRAMES, DANGER_FRAMES);
+static int run_ring(afx_instance_t inst, uint32_t base, unsigned ch, bool inject) {
+    const char *tag = inject ? "MODE_U" : "MODE_A";
+    printf("%s_BEGIN duration_ms=%d half_frames=%d poll_us=%d late_frames=%d danger_frames=%d\n",
+           tag, inject ? MODE_U_MAX_MS : MODE_A_MS, HALF_FRAMES, POLL_US, LATE_FRAMES, DANGER_FRAMES);
 
     /* Fill the whole ring (+guard) with stream frames 0..4095, phase-continuous. */
     g_phase = 0.0f;
@@ -326,6 +334,8 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
 #else
     uint64_t play_abs = pos, prod = RING_FRAMES;
 #endif
+    const uint32_t aica_tick0 = afx_status_timer_ticks();   /* AICA-domain clock (ARM7 timer-A FIQ) */
+    const uint64_t aica_frame0 = play_abs;
     uint32_t gen[2] = {0, 1};
     last = pos;
 
@@ -336,6 +346,11 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
     int64_t max_lateness = 0;
     uint64_t busy_us = 0, upload_total_us = 0;
     bool in_underrun = false, in_generr = false;
+    /* Mode U (deliberate underrun) state */
+    uint64_t skip_K = 0, t_recovery_ok = 0;
+    bool armed = false, skip_printed = false, warned = false, detected = false, recovery_ok = false;
+    uint32_t intentional = 0, intentional_generr = 0, post_ok = 0, recov_printed = 0;
+    int64_t detect_latency = -1, warn_margin = -1, min_margin_episode = INT64_MAX;
     struct { uint32_t pos, adv, rd_us; uint32_t dt_us; double exp; uint64_t t_ms; } hist[8];
     uint32_t hist_n = 0, trail = 0, anomaly_dumps = 0;
 #ifdef MODEA_DENSE
@@ -344,7 +359,7 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
 
     uint64_t t_start = now_us(), next_poll = t_start + POLL_US, next_progress = t_start + 5000000u;
     uint64_t t_prev_poll = t_start;
-    uint64_t wall_end = t_start + (uint64_t)MODE_A_MS * 1000u;
+    uint64_t wall_end = t_start + (uint64_t)(inject ? MODE_U_MAX_MS : MODE_A_MS) * 1000u;
 
     while (now_us() < wall_end) {
 #ifdef MODEA_SPIN_POLL
@@ -418,12 +433,35 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
 
         /* 2. margin / underrun / generation ownership */
         int64_t margin = (int64_t)(prod - play_abs);
-        if (margin < min_margin) min_margin = margin;
-        if (margin <= 0) { if (!in_underrun) { underruns++; printf("UNDERRUN play_abs=%llu prod=%llu\n", (unsigned long long)play_abs, (unsigned long long)prod); } in_underrun = true; }
-        else in_underrun = false;
+        bool episode = inject && skip_printed && !recovery_ok;
+        if (episode) { if (margin < min_margin_episode) min_margin_episode = margin; }
+        else if (margin < min_margin) min_margin = margin;
         uint64_t cur_half = play_abs / HALF_FRAMES;
+        if (inject && skip_printed && !detected && !warned && margin > 0 && margin <= LATE_FRAMES) {
+            warned = true; warn_margin = margin;
+            printf("UNDERRUN_WARNING margin=%lld cursor_frames=%lu ring_half=%u pending_generation=%llu (stale data not yet reached)\n",
+                   (long long)margin, (unsigned long)pos, (unsigned)(cur_half & 1), (unsigned long long)skip_K);
+        }
+        if (margin <= 0) {
+            if (!in_underrun) {
+                if (inject && skip_printed && !detected && cur_half == skip_K) {
+                    detected = true; intentional++;
+                    detect_latency = (int64_t)(play_abs - skip_K * HALF_FRAMES);
+                    printf("UNDERRUN cursor=%lu half=%u expected_gen=%llu actual_gen=%lu detect_latency_frames=%lld warned_before=%d\n",
+                           (unsigned long)pos, (unsigned)(cur_half & 1), (unsigned long long)cur_half,
+                           (unsigned long)gen[cur_half & 1], (long long)detect_latency, warned ? 1 : 0);
+                } else {
+                    underruns++;
+                    printf("UNDERRUN_UNEXPECTED play_abs=%llu prod=%llu\n", (unsigned long long)play_abs, (unsigned long long)prod);
+                }
+            }
+            in_underrun = true;
+        } else in_underrun = false;
         if (gen[cur_half & 1] != (uint32_t)cur_half) {
-            if (!in_generr) { gen_errors++; printf("GEN_ERROR cursor_half=%llu ring_half=%u has_generation=%lu\n", (unsigned long long)cur_half, (unsigned)(cur_half & 1), (unsigned long)gen[cur_half & 1]); }
+            if (!in_generr) {
+                if (inject && skip_printed && cur_half == skip_K && !recovery_ok) intentional_generr++;
+                else { gen_errors++; printf("GEN_ERROR cursor_half=%llu ring_half=%u has_generation=%lu\n", (unsigned long long)cur_half, (unsigned)(cur_half & 1), (unsigned long)gen[cur_half & 1]); }
+            }
             in_generr = true;
         } else in_generr = false;
 
@@ -434,8 +472,20 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
             uint64_t free_at = (K - 1) * HALF_FRAMES;         /* cursor leaves stream half K-2 here */
             if (play_abs < free_at) break;
             int64_t lateness = (int64_t)(play_abs - free_at);
+            if (inject && !armed && (now_us() - t_start) >= (uint64_t)MODE_U_ARM_MS * 1000u) {
+                armed = true; skip_K = K;
+                printf("UNDERRUN_ARMED generation=%llu half=%u\n", (unsigned long long)K, (unsigned)(K & 1));
+            }
+            if (inject && armed && !detected && K == skip_K) {
+                if (!skip_printed) {
+                    skip_printed = true;
+                    printf("REFILL_SKIPPED half=%u generation=%llu lateness_frames=%lld margin=%lld\n",
+                           (unsigned)(K & 1), (unsigned long long)K, (long long)lateness, (long long)(prod - play_abs));
+                }
+                break;                                      /* withheld on purpose */
+            }
             if (lateness > max_lateness) max_lateness = lateness;
-            if (lateness > LATE_FRAMES) late++;
+            if (lateness > LATE_FRAMES && !(inject && armed && !recovery_ok)) late++;
 
             uint64_t g0 = now_us();
             gen_frames(half_buf, HALF_FRAMES);
@@ -452,6 +502,14 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
             gen[half] = (uint32_t)K;
             prod += HALF_FRAMES;
             refills++;
+            if (inject && detected && !recovery_ok) {
+                if (recov_printed < 2) {
+                    recov_printed++;
+                    printf("RECOVERY_REFILL n=%lu K=%llu half=%lu cursor_minus_half_start=%lld (negative: catch-up, cursor not there yet) margin_after=%lld\n",
+                           (unsigned long)refills, (unsigned long long)K, (unsigned long)(K & 1),
+                           (long long)(play_abs - (K) * HALF_FRAMES), (long long)(prod - play_abs));
+                } else if ((int64_t)(prod - play_abs) >= DANGER_FRAMES) post_ok++;
+            }
 
             /* spot checks: first/middle/last word of the half; guard mirror; occasional full verify */
             bool vok = ram_equals(addr, half_buf, 4) &&
@@ -474,6 +532,14 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
         }
 #endif
 
+        if (inject && detected && !recovery_ok && post_ok >= 3 && !in_underrun && !in_generr &&
+            (int64_t)(prod - play_abs) >= DANGER_FRAMES) {
+            recovery_ok = true; t_recovery_ok = now_us();
+            printf("RECOVERY_OK refills_after_recovery=%lu margin=%lld generation_resynced=1\n",
+                   (unsigned long)post_ok, (long long)(prod - play_abs));
+            wall_end = t_recovery_ok + (uint64_t)MODE_U_POST_MS * 1000u;
+        }
+
         /* 4. AFX instance health (every 5th poll = 25 ms) */
 #ifndef MODEA_NO_AFX_UPDATE
         if (polls % 5 == 0) {
@@ -495,11 +561,22 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
     uint32_t duration_ms = (uint32_t)((t_end - t_start) / 1000u);
     double ratio = (double)play_abs / ((double)(t_end - t_start) * 0.0441);
     uint32_t expected_refills = (uint32_t)((uint64_t)duration_ms * 441u / 10u / HALF_FRAMES);
-    bool completed = duration_ms >= (uint32_t)(MODE_A_MS - 100) && refills + 3 >= expected_refills;
+    bool completed = inject ? (armed && detected && recovery_ok && (t_end - t_recovery_ok) + 200000u >= (uint64_t)MODE_U_POST_MS * 1000u)
+                            : (duration_ms >= (uint32_t)(MODE_A_MS - 100) && refills + 3 >= expected_refills);
     bool pass = completed && underruns == 0 && late == 0 && gen_errors == 0 && cursor_anoms == 0 &&
                 inst_errors == 0 && guard_bad == 0 && verify_errors == 0 && min_margin >= DANGER_FRAMES;
+    if (inject) pass = pass && intentional == 1 && intentional_generr <= 1 && warned && recovery_ok;
 
-    printf("MODE_A_SUMMARY\n");
+    {
+        /* Cross-check with the AICA-domain tick counter: needs no SH-4 timer at all. */
+        uint32_t ticks = afx_status_timer_ticks() - aica_tick0;
+        uint64_t frames = play_abs - aica_frame0;
+        printf("AICA_CLOCK_CHECK ticks=%lu cursor_frames=%llu frames_per_tick=%.4f implied_tick_hz=%.3f "
+               "(1000.000 if ticks were exact ms; 1002.273 if timer A reload 212 -> 44 samples)\n",
+               (unsigned long)ticks, (unsigned long long)frames,
+               ticks ? (double)frames / ticks : 0.0, frames ? (double)ticks * 44100.0 / (double)frames : 0.0);
+    }
+    printf("%s_SUMMARY\n", tag);
     printf("duration_ms=%lu\n", (unsigned long)duration_ms);
     printf("refills=%lu (expected~%lu)\n", (unsigned long)refills, (unsigned long)expected_refills);
     printf("polls=%lu poll_stalls=%lu max_poll_gap_us=%lu\n", (unsigned long)polls, (unsigned long)poll_stalls, (unsigned long)max_poll_gap_us);
@@ -516,7 +593,17 @@ static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
     printf("instance_errors=%lu\n", (unsigned long)inst_errors);
     printf("sh4_cursor_refill_busy_pct=%.2f aica_vs_sh4_clock_ratio=%.5f\n",
            100.0 * (double)busy_us / (double)(t_end - t_start), ratio);
-    printf(pass ? "MODE_A_PASS\n" : "MODE_A_FAIL\n");
+    if (inject) {
+        printf("armed_generation=%llu intentional_underruns=%lu intentional_generation_errors=%lu\n",
+               (unsigned long long)skip_K, (unsigned long)intentional, (unsigned long)intentional_generr);
+        printf("warning_before_stale=%d warn_margin_frames=%lld detect_latency_frames=%lld\n",
+               warned ? 1 : 0, (long long)warn_margin, (long long)detect_latency);
+        printf("recovery_ok=%d post_recovery_ms=%lu refills_after_recovery=%lu\n", recovery_ok ? 1 : 0,
+               (unsigned long)(recovery_ok ? (t_end - t_recovery_ok) / 1000u : 0), (unsigned long)post_ok);
+        printf("min_margin_normal=%lld min_margin_during_episode=%lld\n", (long long)min_margin, (long long)min_margin_episode);
+        printf("(underruns/generation_errors above count UNEXPECTED events only)\n");
+    }
+    printf("%s_%s\n", tag, pass ? "PASS" : "FAIL");
     return pass;
 }
 
@@ -535,7 +622,7 @@ int main(int argc, char **argv) {
     afx_instance_t inst = 0;
     int result = 0, all_ok = 1;
 
-    printf("AICA_RING_TEST_BEGIN phases=bandwidth_sweep,mode_a\n");
+    printf("AICA_RING_TEST_BEGIN phases=bandwidth_sweep,mode_a,mode_u\n");
     make_ring();
     result = afx_init(firmware, sizeof(firmware));
     if (!result) result = load_bank(&bank);
@@ -673,12 +760,15 @@ int main(int argc, char **argv) {
     printf("NOTE worst cursor deviation %.1f samples (read resolution ~+-3 samples)\n", worst_dev);
 
     printf("SWEEP_RESULT %s\n", all_ok ? "PASS" : "FAIL (see CHECK lines)");
-#ifndef RING_SKIP_MODE_A
-    /* Mode A depends on correct uploads and read-back, not on sweep timing outliers. */
+    /* Modes A and U depend on correct uploads and read-back, not on sweep timing outliers. */
     if (ram_ok && !upload_fail && !verify_fail && bad_state == 0) {
-        if (!run_mode_a(inst, base, ch)) all_ok = 0;
-    } else { printf("MODE_A_SKIPPED (uploads/readback/state not clean)\n"); all_ok = 0; }
+#ifndef RING_SKIP_MODE_A
+        if (!run_ring(inst, base, ch, false)) all_ok = 0;
 #endif
+#ifndef RING_SKIP_MODE_U
+        if (!run_ring(inst, base, ch, true)) all_ok = 0;
+#endif
+    } else { printf("RING_MODES_SKIPPED (uploads/readback/state not clean)\n"); all_ok = 0; }
 
 done:
     {
@@ -687,7 +777,7 @@ done:
         if (!result) result = rr;
     }
     afx_shutdown();
-    printf("%s\n", (!result && all_ok) ? "AICA_RING_TEST_DONE (sweep + Mode A; behaviour under real load NOT claimed)"
+    printf("%s\n", (!result && all_ok) ? "AICA_RING_TEST_DONE (behaviour under real load NOT claimed)"
                                        : "AICA_RING_TEST_FAIL");
     printf("AICA_RING_TEST_END\n");
     return (!result && all_ok) ? 0 : 1;

@@ -71,3 +71,21 @@ mGBA code that paces on those timers.
   fresh-AFX assumption.
 - Clicks at refill boundaries beyond the user's by-ear report; no line-out capture.
 - One 60 s hardware run with the fixed clock (plus earlier runs that failed only on the artifact).
+
+## AICA-domain clock cross-check (added later)
+The ring test now also prints `AICA_CLOCK_CHECK`: AICAflow's own ARM7 timer-A tick counter
+(`AFX_AICA_TIMER_TICK_ADDR`, SPU RAM 0x1fffe0, read by `afx_status_timer_ticks()`) against the
+cursor's frame count, independent of any SH-4 timer. Real console, 20 s Mode A:
+
+```
+AICA_CLOCK_CHECK ticks=20048 cursor_frames=882271 frames_per_tick=44.0079 implied_tick_hz=1002.092
+```
+- The tick counter is **not** 1000 Hz. Timer A is loaded with `AFX_TIMER_RELOAD = 212`, so it overflows
+  every 256 - 212 = 44 AICA samples = 1002.27 Hz; measured 1002.09 Hz (the 0.02% shortfall is
+  about 3.6 ticks in 20 s, consistent with edge granularity and FIQ reload latency).
+- Flow headers author at `tick_rate_num/den = 1000/1`, and I found no conversion to 1002.27 Hz in the
+  places I grepped (`afx_compile_c.c`, `codec.c`, `driver.c`). If the ARM7 compares authored deadlines to
+  this counter unscaled, authored timing/tempo runs about 0.2% fast (about 3.6 cents). **Unverified**:
+  needs a long-WAIT flow measured against the cursor.
+- Useful as an audio-domain second clock: cursor frames = 44.0 x ticks, with ~1 ms resolution. Too coarse
+  for the ~50 us monitor settle, and it needs the firmware running (it is not a free-standing AICA counter).
