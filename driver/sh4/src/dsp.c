@@ -3,6 +3,10 @@
 #include <math.h>
 #include <string.h>
 
+#ifndef M_PI /* hidden by strict -std=c11 on glibc */
+#define M_PI 3.14159265358979323846
+#endif
+
 static int step_valid(const afx_dsp_step_t *s) {
     return s && s->tra <= 127 && s->twt <= 1 && s->twa <= 127 && s->xsel <= 1 &&
            s->ysel <= 3 && s->ira <= 63 && s->iwt <= 1 && s->iwa <= 31 &&

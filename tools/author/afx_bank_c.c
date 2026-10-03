@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 700 /* PATH_MAX and realpath() under -std=c11 on glibc */
 #include "afx_compile_c.h"
 #include "afx_midi_c.h"
 #include "afx_sample_c.h"
