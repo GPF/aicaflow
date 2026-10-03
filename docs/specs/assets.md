@@ -316,9 +316,8 @@ and MIDI files.
 `humanize <song> <seed> <level-centibels> <shorten-ms> <lfo-rate-steps>` is
 an optional deterministic offline score-lowering directive. It changes NOTE
 level and KEYOFF placement before AFX emission; it creates no runtime state.
-The native parity policy currently accepts `0` for `lfo-rate-steps`. For new
-music, put deliberate rhythmic timing in MIDI; this directive exists only to
-reproduce a declared historic offline rendition exactly.
+`lfo-rate-steps` must be `0`; rate variation is not implemented. Put deliberate
+rhythmic timing in MIDI.
 
 ### AFBM reference
 

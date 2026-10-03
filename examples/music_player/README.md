@@ -51,9 +51,8 @@ The default Bach build uses the checked-in, humanised performance MIDI
 public-domain Mutopia score. It is intentionally source material: its rubato
 and note timing are reproducible MIDI data rather than hidden AFX edits. It
 is SHA-256 checked by the build (`3455b959b496302bd784cde858c81808712c69c0af84b3aae062866733071599`). It
-uses Ethan Winer's royalty-free *Cello Solo* SoundFont at 27 kHz PCM16. This
-is the same verified source used by the earlier well-received cello rendition;
-the default uses its stereo pair and leaves room for the Bach room profile.
+uses Ethan Winer's royalty-free *Cello Solo* SoundFont's stereo pair at
+27 kHz PCM16, leaving room for the Bach room profile.
 The default Grieg source is Hans-Joachim Roeder's full type-1 GM orchestration,
 fetched from MidiCities with its SHA-256 verified. The map preserves piccolo,
 flute, clarinet, bassoon, pizzicato/ensemble strings, brass and timpani instead
@@ -102,7 +101,7 @@ detailed source would otherwise not fit.
 
 The POSIX-shell downloader verifies SHA-256 for every input. The native C
 authoring tool resolves MIDI program/bank changes through the selected SF2,
-expands its layered regions offline, and writes AFB/AFX/AFC/AFV/AFI without Python.
+expands its layered regions offline, and writes AFB/AFX/AFC/AFV/AFI.
 [`classical.afbm`](classical.afbm) is the editable bank map; it selects PCM16,
 PCM8 or ADPCM per declared MIDI-program mapping and can be extended with
 additional SoundFont sources. `auto` makes its format decision for every

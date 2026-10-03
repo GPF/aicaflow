@@ -32,7 +32,7 @@ using that extension in another project.
 | --- | --- |
 | `make compiler` | Native authoring binaries under `build/`; Clang, libm and zlib |
 | `make tools` | Dreamcast persistent tuner; KOS SH4 environment |
-| `make check` | Native/driver/Python reference tests; no ARM7 compiler |
+| `make check` | Native/driver/Python tests; no ARM7 compiler |
 | `make firmware-check` | Rebuilt firmware matched to its manifest; ARM7 toolchain |
 
 `tuner/` contains the resident Dreamcast tuner (`server/`) and its small host
@@ -41,8 +41,5 @@ see [Tuner](../docs/tuner.md) for commands, memory lifetime and reset behavior.
 
 `author/` is the supported C toolchain; its [README](author/README.md) gives
 command-line recipes. `test/` contains fixtures and checks. `research/`
-contains Python experiments/reference implementations, including the separate
-OoT AudioSeq research reader. They remain useful for comparison, not as a
-second supported runtime format. The supported asset generators and example
-authoring path have no Python dependency; the tuner client and reference tests
-do use Python.
+contains experimental utilities, including the separate OoT AudioSeq reader.
+Python is required by the tuner client and test suite.

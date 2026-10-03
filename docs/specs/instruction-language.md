@@ -1,8 +1,8 @@
 # AFX instruction language
 
-This is the bytecode inside a sample-free AFX image. It replaces the retired
-AICAFLOW_INSTRUCTION_LANGUAGE.md draft. It describes AFX file version 7; that
-is distinct from the firmware SH-4/ARM7 ABI carried in the status block.
+This is the bytecode inside a sample-free AFX image. It describes AFX file
+version 7; that is distinct from the firmware SH-4/ARM7 ABI carried in the
+status block.
 
 The stream starts at **stream_offset** inside the AFX image. Its first
 **setup_count × AFX_SETUP_BYTES** bytes are AICA register templates; optional

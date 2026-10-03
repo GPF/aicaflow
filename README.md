@@ -32,9 +32,6 @@ to reproduce the release image.
 
 `make compiler` builds the native C authoring tools; see the
 [tool inventory](tools/README.md) and [authoring workflow](docs/authoring.md).
-Examples author their assets without Python. The tuner host client uses Python
-and the developer test suite uses Python reference checks; neither adds a
-Python interpreter to the Dreamcast runtime.
 
 ## Files and ownership
 

@@ -1,18 +1,19 @@
 # ARM7 timed executor
 
-This ABI 3 firmware owns Timer A, but its FIQ only increments the reserved clock
+The firmware owns Timer A, but its FIQ only increments the reserved clock
 and reloads the timer. Bounded normal-context code drains IPC and executes due
 stream operations. It advertises bootstrap, lifecycle and playback capabilities.
 
 The linker reserves low code, high writable data/BSS, all five banked stacks,
-shared status/IPC/context maps and the permanent 128 KiB DSP ring. Startup copies
+shared status/IPC/context maps. SH4 reserves optional DSP delay memory from
+the asset arena. Startup copies
 initialized data, clears BSS and fills stack watermarks before entering C.
 The host validates the embedded layout manifest before resetting/uploading.
 
-See [the numeric/wire contract and checks](../CONTRACT.md), the
-[accepted specification](../../AICAFLOW_SPEC.md) and
-[delivery gates](../../ACCEPTANCE_PLAN.md). The old 0xb000 stack, wait-counter
-interpreter and AFLW format are not current implementations.
+See [the runtime contract](../../docs/specs/runtime.md),
+[IPC](../../docs/specs/ipc.md), [memory layout](../../docs/memory.md) and
+[testing](../../docs/testing.md). The numeric ABI and layout are defined in
+[`protocol.h`](../include/aicaflow/protocol.h).
 
 Build after sourcing your KOS environment:
 
@@ -21,13 +22,9 @@ make -C driver/arm7
 make -C driver layout
 ```
 
-The layout check validates the built manifest and accounts for all 2 MiB.
-The finite [hardware smoke test](../../RECORDING.md) verifies bootstrap startup,
-G2 status reads, Timer A advancement, a compiler-generated MIDI-to-AFX fixture,
-an autonomous relocated tone with a timed pan PATCH, PARK/SH-4 PATCH/STOP and
-clean loader return on the primary console. Initial main-stack free space was
-2032/2048 bytes; all four unused exception stacks retained 256/256. Interrupt
-load, timing stress and worst-case running-stack usage remain unverified.
+The layout check validates the built firmware manifest against the headers.
+Hardware checks must also exercise timed playback, PATCH, PARK/STOP and
+clean instance teardown; see [Testing](../../docs/testing.md).
 
 Flycast v2.6's ARM recompiler silently ignores `msr cpsr_c` writes. Startup
 and FIQ enable therefore use register-form `msr cpsr_cf`: startup flags are

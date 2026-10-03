@@ -1,7 +1,7 @@
 # Testing
 
 `make check` builds the native C tools, runs host driver tests, sanitizer-backed
-C authoring tests and deterministic Python reference/client checks. It does not
+C authoring tests and Python checks. It does not
 require an ARM7 toolchain or a game ROM. Use Clang with AddressSanitizer and
 UndefinedBehaviorSanitizer support, zlib, and Python with `mido` and `sf2utils`:
 
@@ -12,7 +12,7 @@ python3 -m pip install mido sf2utils
 make check
 ```
 
-Python packages are test/reference dependencies, not dependencies of the C
+Python packages are test dependencies, not dependencies of the C
 authoring binaries or runtime. Tests include malformed assets, bank bindings,
 lossless merging, compact NOTE/PATCH encodings, AFP transforms, CSeq parsing,
 ALBank SFX lifetimes/quality selection, MultiPCM and the tuner client.
@@ -28,7 +28,6 @@ player's `make frame-test` exercises its real loader and exits after all three
 pieces; its [README](../examples/music_player/README.md#hardware-frame-test)
 also explains how to restore an interactive build afterwards.
 
-Game-corpus comparisons are separate integration checks: the generic tests do
-not distribute or extract game assets. See [Authoring parity](authoring-parity.md)
-for the measured DKR corpus and the distinction between source semantics,
-functional equivalence and file-byte identity.
+Game integration checks require the application's own extracted inputs; the
+generic tests do not distribute or extract game assets. Validate bank residency,
+scene transitions, live controls and audible behavior in the application.
