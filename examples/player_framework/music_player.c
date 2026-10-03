@@ -43,6 +43,9 @@
 #ifndef PLAYER_SONG_GAIN
 #define PLAYER_SONG_GAIN(index) 255u
 #endif
+#ifndef PLAYER_SONG_TEMPO
+#define PLAYER_SONG_TEMPO(index) songs[(index)].tempo
+#endif
 #ifndef PLAYER_VISUAL_FILE
 #define PLAYER_VISUAL_FILE(index) NULL
 #endif
@@ -498,7 +501,7 @@ static int room(const char *name) {
 static int start(void) {
     int index=loaded;
     int r=afx_instance_activate(asset,&instance);
-    tempo_q8_8=songs[index].tempo;
+    tempo_q8_8=PLAYER_SONG_TEMPO(index);
     duration_ms=(uint32_t)((uint64_t)authored_duration_ms*256u/tempo_q8_8);
     if (!r) r=afx_instance_tempo(instance,tempo_q8_8);
     if (!r) r=wait_state(AFX_RUNNING);
@@ -663,7 +666,9 @@ static void update(void *unused) {
             else if (pad->button.RIGHT==ENJ_BUTTON_DOWN_THIS_FRAME) r=seek(10);
         }
     } else { input_armed=false; last_ltrigger=last_rtrigger=0; }
+#ifdef PLAYER_SONG_BANK_FILE
     if (!r && bank_loader.file) r=bank_load_step();
+#endif
     if (!r && pending>=0 && !bank_loader.file) r=finish_song_load();
     if (!r && visual_file) load_visual_chunk();
     if (r) { stop(); snprintf(message,sizeof(message),"Could not play/seek (%d). Press A to retry.",r); }
