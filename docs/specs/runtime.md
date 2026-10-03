@@ -39,10 +39,9 @@ The command queue carries activation, stop/pause/rebuild/recycle, register
 patches, per-instance gain and tempo, lane values, and DSP enable/disable.
 Register fields cover the ordinary AICA channel controls: sample format and
 address, loop points, envelope, pitch, LFO, direct path, filter, mixer level
-and DSP send. The simplified file model does not limit those AICA features.
+and DSP send.
 
-Seek reconstruction and lane state are SH-4 facilities. They are not a second
-AFX variant and do not enlarge the ARM7 file interpreter. A DSP scene may
+SH4 maintains seek reconstruction and lane state. A DSP scene may
 reserve an external delay ring; its selected size changes the asset ceiling as
 described in [Memory layout](../memory.md).
 

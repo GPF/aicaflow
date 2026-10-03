@@ -40,7 +40,7 @@ application steps:
 
 Integer APIs generally return zero on success and a negative `afx_result_t`
 on failure. Handle/address getters use zero for invalid results. Do not spin
-through allocation/queue failures blindly: check memory, pending lifecycle
+through allocation/queue failures: check memory, pending lifecycle
 state, execution budget and the observed ARM7 result. Preserve successfully
 created handles until their normal cleanup has completed, including on partial
 startup failure. `afx_shutdown()` requires flows, instances and banks released.
@@ -50,20 +50,20 @@ startup failure. `afx_shutdown()` requires flows, instances and banks released.
 An uploaded flow retains its bank; an instance retains its flow. Several
 different or concurrent flows can share a bank, but each flow binds to just
 one. A scene transition should stop/recycle old instances before freeing their
-flows/bank, or deliberately keep a shared bank resident. No automatic sample
-cache or game-specific bank-swap policy exists in the core driver.
+flows/bank. Shared banks can stay resident across scene changes. The application
+controls residency; the driver has no automatic sample cache.
 
 `afx_instance_patch()` addresses a **local channel**, not a physical AICA
 channel. Its mask and values are the existing register fields in ascending
 field order. Pitch, mix, envelope, pan/filter, LFO and DSP send can be changed
 while a voice is running/parked. Host-built SFX protect their immutable sample
 binding and reject sample-address/loop changes and raw seek/rebuild. Use a
-new bound flow when replacing that sample, not a forged address PATCH.
+new bound flow when replacing that sample.
 
 Runtime lane modifiers are persistent SH4-controlled grouping modifiers
 (gain/mute/pan/send) on authored lane maps. An AFP's offline `lanes` entries
 are different: they compile into ordinary timed PATCH operations and require
-no profile interpreter or runtime random generator.
+no runtime profile state.
 
 ## Seek, DSP and player metadata
 
@@ -77,9 +77,8 @@ sends; the application installs/gates the DSP program. An AFP's `describe`
 output gives build-time scene/tempo metadata. The runtime does not open AFP,
 AFBM or AFSFX and does not infer a preset or tempo from an AFX filename.
 
-For file-backed playback over a host tool, map the actual asset directory as
-`/pc` (`-m`); keep that server and computer awake. A successful ELF upload does
-not guarantee later scene/song file reads will work over Wi-Fi or after sleep.
+For host-backed file playback, map the asset directory as `/pc` with `-m`.
+Keep the host server running and disable computer sleep while playback uses it.
 
 See [lifetime.md](lifetime.md) for the ownership rules and
 [Assets and sidecars](specs/assets.md) for the asset contract. See

@@ -3,7 +3,7 @@
 An interactive enDjinn Dreamcast listener for AICAflow's twenty-four named DSP
 programs. It constructs the selected program in C at runtime and applies it to
 the selected input. It has effect-tuned, impulse, tone, modulated-tone and
-Wilhelm-scream sources. No `.dsp` files or archived DSP recordings are used.
+Wilhelm-scream sources.
 
 The effect-tuned source contains one audible phrase on `MIXS0` plus four silent
 direct control voices on `MIXS1..4`. This makes the modulation, pitch-shift

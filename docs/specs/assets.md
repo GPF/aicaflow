@@ -23,10 +23,8 @@ the required bank-relative address and AICA register values.
 | `.afi` | Optional binary AFB sample catalog | SH4-side one-shot code |
 | `.afsfx` | Application SFX grouping/residency map | Offline application pack builder |
 
-AFBM, AFP and AFSFX are authoring inputs, not files interpreted by ARM7.
-All binary layouts are little-endian. Fixed headers make the files cheap to
-validate and intentionally leave no alternate container or compatibility
-encoding.
+AFBM, AFP and AFSFX are offline authoring inputs. Binary files use
+little-endian fields and fixed headers.
 
 ## AFB — sample bank
 
@@ -50,11 +48,8 @@ it compares the precomputed identity in the AFB and AFX headers.
 
 ## AFX — control flow
 
-An AFX begins with a fixed 80-byte header (`AFX2`, file version `7`). Its
-important fields are total size, flags, image offset and size, stream offset
-and size inside that image, control identity, setup count, bound AFB identity,
-relocation table location/count, required channel count, tick-rate numerator and
-denominator, and the work profile. The image offset is 32-byte aligned.
+An AFX begins with an 80-byte header (`AFX2`, file version `7`). The upload
+image starts at a 32-byte-aligned file offset.
 
 All fields are unsigned 32-bit little-endian words:
 
@@ -79,14 +74,12 @@ All fields are unsigned 32-bit little-endian words:
 | 76 | work_profile | Peak burst commands in high 16 bits, register writes in low 16 bits |
 
 The file header and relocation table are SH4 loader data; only the resolved
-image is the persistent AICA flow allocation. Sample-free does not mean
-"contains no sample references": the setups contain format/loop/address words
-which bind to the separate AFB.
+image is stored in AICA RAM. Setups contain format, loop and address words
+bound to the separate AFB.
 
 Each relocation gives a setup-pair offset, a bank-relative sample offset and
 its byte length. The loader checks it against the AFB payload and resolves the
-address once. The timed stream only contains existing ARM7 bytecode operations;
-AFX has no embedded samples, no sample names and no runtime parser extension.
+address once. AFX contains no sample data or names.
 Each 12-byte on-disk relocation is `pair_offset`, `sample_offset`,
 `sample_bytes` (three u32 words). `pair_offset` is image-relative and points to
 the setup CONTROL/SAMPLE_LOW pair; `sample_offset` is **AFB-payload-relative**,
@@ -111,12 +104,9 @@ An AFC begins with exactly 32 bytes:
 | 28 | 4 | total file bytes |
 
 The payload is a checkpoint table used only by the SH-4 when a player offers
-seek. Normal playback neither loads nor needs AFC. It is deliberately separate
-so applications without seeking do not carry its SH-4 memory cost.
-The AFC file is never uploaded as an AICA asset. The SH4 loader validates the header and
-retains the checkpoint payload; it does not retain the header as checkpoint
-data. A player's "AFC KiB" file-size label can include that 32-byte header and
-round up to KiB, so it is not a measurement of the live AICA allocation.
+seek. Normal playback does not need AFC. SH4 validates the header and retains
+only the checkpoint payload. The file is never uploaded as an AICA asset.
+An AFC file-size display includes its 32-byte header; it is not AICA RAM usage.
 
 ### Checkpoint payload
 
@@ -144,29 +134,24 @@ table into AICA or make ARM7 interpret it. Checkpoints describe register/timelin
 state, not a saved PCM decoder cursor, sample waveform or DSP delay-ring image;
 seeking is musical reconstruction, not bit-exact sample-phase restoration.
 
-A changed AFP currently emits a valid initial-only checkpoint instead of
-retaining the base table's spacing. This reduces AFC file size but can increase
-SH4 seek replay work. An empty register transform retains the AFC byte-for-byte.
+An AFP register transform emits a tick-zero checkpoint; later seeks require
+SH4 event replay. An empty transform retains the AFC byte-for-byte.
 
 ## AFV — visualisation sidecar
 
-AFV is a compact player asset, not a DSP analysis format. Its `VIZ1` header is
-12 bytes: version, band count, frame rate and frame count. The release compiler
-writes 32 one-byte bands per frame at 60 Hz from the active notes' pitch,
-authored level and a short visual decay, normalized across the piece's actual
-pitch range. It is deliberately an inexpensive musical-energy animation, not a
-PCM FFT or a measurement of the final DSP mix. A player may omit AFV with no
-effect on audio playback or seeking.
+AFV stores 32 one-byte bands per frame at 60 Hz. Values represent active-note
+pitch and level with a short visual decay, normalized across the piece's
+pitch range. It is a note-energy animation, not an FFT of the output audio.
+AFV is optional and does not affect playback or seeking.
 The exact 12-byte header is `magic[4]`, `version:u8=1`, `bands:u8=32`,
 `rate:u8=60`, `reserved:u8=0`, `frames:u32`. It is followed by `frames * bands`
-bytes in frame-major order. Regenerate it after an AFP changes expression;
-an old visual sidecar can animate even when the corresponding sound is silent.
+bytes in frame-major order. Regenerate AFV after changing the AFX.
 
 ## AFP — performance profile
 
 AFP is editable JSON and is bound to one base AFX by its AFX file version and a
 SHA-256 digest. It is an offline transform: it writes a derived AFX and matching
-AFC, never a profile interpreter on Dreamcast. Note timing belongs to the source
+AFC. Note timing belongs to the source
 MIDI/control flow; AFP is for timbre, articulation, DSP routing and an optional
 whole-flow playback rate.
 
@@ -201,7 +186,7 @@ The effective parameters for a note are resolved in this order:
 An ordinal is the zero-based position among note events at the same tick; it is
 only an offline selector, never a timing offset. `build/afx_profile inventory
 song.afx` prints the available selectors and their source setups. `init` writes
-the compact empty form rather than hundreds of redundant all-note assignments.
+defaults and empty template, override and lane collections.
 
 A `lanes` entry is a timed register change belonging to one selected note. Its
 `offset` is measured from that note's NOTE-on tick. An offset of zero is folded
@@ -212,8 +197,8 @@ not the NOTE/KEYOFF schedule: timing and humanisation still belong in MIDI or
 another control-flow source. They are compiled offline, so the ARM7 receives no
 profile format or lane interpreter.
 
-`dsp.preset` installs **one scene for the whole flow**. AICA cannot run a
-different DSP program for each note. `dsp_send`, however, is an ordinary AICA
+`dsp.preset` selects **one scene for the whole flow**, installed by the SH4
+application. `dsp_send` is an AICA
 channel register: a global default can send every note to that scene, a template
 can change the send for a family of notes, and one override can make a selected
 note drier or wetter. The same precedence works for `env_ad`, `env_dr`, `lfo`,
@@ -231,16 +216,15 @@ The offline build reads `afx_profile describe` into player/application
 metadata. The preset name and tempo are not embedded as a runtime profile in
 AFX; merely uploading the derived AFX does not install DSP or set that speed.
 
-Supported preset names are `dry`, `room`, `room_warm` and `room_large`. A dry
-preset with empty defaults is a useful byte-identical profile: applying it
-copies both AFX and AFC unchanged.
+Supported preset names are `dry`, `room`, `room_warm` and `room_large`.
+If no register words change, applying the profile copies AFX and AFC unchanged.
 
 ### AFP reference
 
 All top-level properties shown in the JSON example are required, except
 `tempo_q8_8`, which defaults to `256`. `base.afx_version` must be `7` and
 `base.canonical_sha256` must be the exact SHA-256 of the input AFX; a mismatch
-is an error, rather than a best-effort application to another arrangement.
+is an error.
 Template names are non-empty strings of at most 47 bytes; at most 64 templates
 are accepted. Every `setup_templates` key is a decimal setup number present in
 the base AFX and every referenced template must exist.
@@ -270,8 +254,7 @@ offset. Selector identity is always exactly:
 
 The parser rejects missing selectors, unknown parameter names, values outside
 `0..65535`, unused overrides/lanes, a lane after its target has KEYOFFed, and
-per-tick command/write-budget overflows. This makes an AFP a checked offline
-source file, not a permissive automation language.
+per-tick command/write-budget overflows.
 
 ## AFBM — bank map
 
@@ -327,22 +310,20 @@ Paths are resolved relative to the AFBM itself. Quote a `source` or `song`
 path when it contains spaces. All `source` lines must precede all `map` lines,
 and all maps must precede the first `song` line.
 
-The current AFBM `source` implementation accepts SF2 files. Standalone PCM
-mapping remains available through `afx_compile --zones`; it is not silently
-pretended to be AFBM syntax yet.
+AFBM `source` accepts SF2 files. Standalone PCM uses `afx_compile --zones`.
 
 | Directive | Grammar | Meaning |
 | --- | --- | --- |
 | `source` | `source <name> <sf2-path> [stereo|left|right]` | Names one SF2 input. `stereo` is default; `left` and `right` select one linked side and centre it. |
 | `map` | `map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <format> [option…]` | Routes matching MIDI notes to a preset in a named source. Banks are `0..16383`; programs are `0..127`. |
 | `song` | `song <name> <midi-path> [tick-rate] [release-tail-ms]` | Adds a flow. Tick rate defaults to `1000` (`1..1000000`); release tail defaults to `0` (`0..10000`). |
-| `humanize` | `humanize <song> <seed> <level-centibels> <shorten-ms> 0` | Optional deterministic legacy rendition policy: level variation `0..120` centibels and KEYOFF shortening `0..20` ms. It must appear after that song. |
+| `humanize` | `humanize <song> <seed> <level-centibels> <shorten-ms> 0` | Deterministic level variation `0..120` centibels and KEYOFF shortening `0..20` ms. Must appear after the song. |
 
 `<format>` is `pcm16`, `pcm8`, `adpcm` or `auto`. `auto` first accepts ADPCM
 only when the deterministic whole-sample and attack-window quality tests pass;
-otherwise it emits PCM8. Looped material deliberately stays out of ADPCM.
+otherwise it emits PCM8. Looped material uses PCM8.
 
-The optional map settings are deliberately explicit:
+Optional map settings:
 
 | Option | Values and default | Effect |
 | --- | --- | --- |
@@ -351,7 +332,7 @@ The optional map settings are deliberately explicit:
 | `filter` | `envelope` (default), `static`, `none` | Chooses lowered SF2 filter treatment. |
 | `gain` | `standard` (default), `fluidsynth2` | Chooses SF2 attenuation calibration. |
 | `gain_bias` | `-10200..10200`; `0` | Adds offline gain calibration in centibels. |
-| `envelope` | `sf2` (default), `fixed` | Uses SF2 amplitude envelope or the fixed AICA baseline. |
+| `envelope` | `sf2` (default), `fixed` | Uses the SF2 amplitude envelope or a fixed AICA envelope. |
 | `source_pan` | `apply` (default), `ignore` | Applies or suppresses SF2 and MIDI pan. |
 | `source_reverb` | `apply`, `ignore` (default) | Converts SF2 reverb send to DSP send. |
 | `dsp_send` | `0..255` | Sets an explicit DSP send; cannot be combined with `source_reverb=apply`. |
@@ -362,13 +343,11 @@ The optional map settings are deliberately explicit:
 | `loop_ms` | `20..2000` | Trims a looped SF2 sample near this duration at a low-discontinuity point. |
 
 Routing chooses, in order: song-specific channel map, song-specific generic
-map, `*` channel map, then `*` generic map. Thus a score can route percussion
-or one song to a different preset without adding any runtime bank type.
+map, `*` channel map, then `*` generic map.
 
-`build/afx_bank map.afbm out shared.afb` writes one shared AFB and one
-AFX/AFC/AFV/AFI set per `song`; `build/afx_bank --per-song map.afbm out` writes
-an independent AFB plus sidecars per song. The latter trades RAM reuse for
-per-song sample quality and is what the classical player uses.
+`build/afx_bank map.afbm out shared.afb` writes one shared AFB with AFI catalogs,
+plus AFX/AFC/AFV per song. `build/afx_bank --per-song map.afbm out` writes an
+independent bank and sidecars per song.
 
 The native import path lowers static SF2 envelope, attenuation, pan,
 reverb-send and filter controls, plus supported linear SF2 modulator graph
@@ -409,17 +388,15 @@ Each compact 16-byte record is little-endian:
 
 The 32-byte named record appends a zero-padded, fixed 16-byte source sample
 name at offset 16. Duplicate AFX setups that refer to the same AFB sample
-produce one AFI record. AFI currently describes direct one-shots: loop points,
-root-key and tuning deliberately remain AFX setup data.
+produce one AFI record. AFI describes direct one-shots; loop points, root key
+and tuning are stored in AFX setups.
 
 ## AFSFX — SFX bank grouping/residency map
 
 An AFSFX declares which source sounds should be packed/preloaded together.
 It does not describe PCM coding, a sample catalog, a DSP program or a control
-stream. The current reader is DKR's `dreamcast/build_aicaflow_sfx.py`; the
+stream. The reader is DKR's `dreamcast/build_aicaflow_sfx.py`; the
 native `afx_n64 --sfx` and `afx_bank --merge` perform conversion and packing.
 Neither the AICAflow runtime nor `afx_bank` parses AFSFX directly.
 
-The reusable role and the exact implemented grammar, ID spaces, outputs and
-limits are in [SFX bank maps](afsfx.md). DKR's `core`/`vehicle` names and
-vehicle masks are application policy, not requirements imposed by AICA.
+See [SFX bank maps](afsfx.md) for grammar, IDs, outputs and residency rules.

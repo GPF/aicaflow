@@ -1,14 +1,11 @@
 # AICAflow specifications
 
-These documents describe the supported release contract. They replace old
-design notes that mentioned embedded-sample AFX files, general chunk
-containers or alternate runtime bank models.
+File layouts, bytecode and the SH4/ARM7 interface:
 
 - [Runtime ABI](runtime.md) — firmware bootstrap, commands and ownership.
 - [Assets and sidecars](assets.md) — AFB, AFX, AFC, AFV, AFP, AFBM and the
   optional SH4 AFI catalog.
-- [SFX bank maps](afsfx.md) — offline AFSFX purpose and the current DKR
-  application reader; not another SH4/ARM7 file ABI.
+- [SFX bank maps](afsfx.md) — offline SFX grouping and DKR map grammar.
 - [AFX instruction language](instruction-language.md) — the exact timed
   bytecode in an AFX control stream.
 - [SH-4 ↔ ARM7 IPC](ipc.md) — queue records, command ownership and durable

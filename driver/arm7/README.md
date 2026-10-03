@@ -4,9 +4,8 @@ The firmware owns Timer A, but its FIQ only increments the reserved clock
 and reloads the timer. Bounded normal-context code drains IPC and executes due
 stream operations. It advertises bootstrap, lifecycle and playback capabilities.
 
-The linker reserves low code, high writable data/BSS, all five banked stacks,
-shared status/IPC/context maps. SH4 reserves optional DSP delay memory from
-the asset arena. Startup copies
+The linker places code, data/BSS, five banked stacks and shared control state.
+SH4 reserves optional DSP delay memory from the asset arena. Startup copies
 initialized data, clears BSS and fills stack watermarks before entering C.
 The host validates the embedded layout manifest before resetting/uploading.
 
@@ -26,12 +25,9 @@ The layout check validates the built firmware manifest against the headers.
 Hardware checks must also exercise timed playback, PATCH, PARK/STOP and
 clean instance teardown; see [Testing](../../docs/testing.md).
 
-Flycast v2.6's ARM recompiler silently ignores `msr cpsr_c` writes. Startup
-and FIQ enable therefore use register-form `msr cpsr_cf`: startup flags are
-unused, and FIQ enable preserves the flags read by `mrs`. Without this,
-Timer A counts and the ARM heartbeat advances, but the software clock stays
-at zero; seeking can sound notes while timed playback remains stuck.
-See [Flycast's MSR decoder](https://github.com/flyinghead/flycast/blob/v2.6/core/hw/arm7/arm7_rec.cpp#L148-L188).
+Startup and FIQ enable use register-form `msr cpsr_cf` for compatibility with
+[Flycast v2.6's ARM recompiler](https://github.com/flyinghead/flycast/blob/v2.6/core/hw/arm7/arm7_rec.cpp#L148-L188),
+which ignores `msr cpsr_c` writes. FIQ enable preserves flags read by `mrs`.
 
 A bounded check boots the actual firmware and verifies that both its clock
 and heartbeat advance in three SH-4-timed intervals:

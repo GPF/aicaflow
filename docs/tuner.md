@@ -1,11 +1,8 @@
 # Persistent tuner
 
-The persistent tuner is a small BBA development target. It stays resident on
-the Dreamcast while the host sends prepared AICAflow assets over TCP, making it
-useful for tuning a bank, an AFX control flow, a seek index, or DSP parameters
-without relaunching the program. It is deliberately *not* an authoring runtime:
-MIDI, SF2, profiles and source audio are processed on the host; ARM7 receives
-only validated AFX commands.
+The tuner receives AFB/AFX assets and DSP programs over TCP while staying
+resident on Dreamcast. Use it to audition songs, regions and live register
+changes. Compile MIDI, SF2 and profiles on the host before upload.
 
 Build and load it once:
 
@@ -16,15 +13,13 @@ kos-tool -t "$DCTOOL_HOST" -f \
   -x tools/tuner/server/bin/afx_tuner_server.elf
 ```
 
-Then use the repository-local client (no Python authoring modules or external
-Python packages are needed):
+The client requires Python 3 and no external packages:
 
 ```sh
 python3 tools/tuner/client.py --host "$DCTOOL_HOST" ping
 ```
 
-`tools/tuner/example.py` is the equivalent small Python program when a project
-wants to drive the tuner itself rather than shelling out to the client:
+For a Python API example:
 
 ```sh
 python3 tools/tuner/example.py music.afb title.afx --index title.afc --reset
@@ -69,16 +64,12 @@ The tuner owns exactly one current bank and one current control flow:
 | `bank-upload` | Stops and frees the old AFX, releases the old AFB allocation, then loads the new AFB. |
 | `control-upload-play` | Stops and frees the old AFX, but keeps the current AFB, then uploads and starts the new control flow. |
 | `--index track.afc` | Keeps the AFB and AFX; replaces only the host-side seek index. |
-| `stop` | Stops/recycles playback but intentionally keeps the loaded AFB and AFX for `play`, patching and inspection. |
+| `stop` | Stops/recycles playback; keeps AFB and AFX for `play`, patching and inspection. |
 | a staged upload | Uses a temporary SH4 buffer. It is freed after its commit, when a later upload begins, or on `reset`/`exit`. |
 
-Consequently, normal replacement does not accumulate AICA allocations. It is
-also normal for old sample bytes to remain physically visible in free AICA RAM:
-they are no longer allocated or reachable and will be overwritten by a later
-upload.
+Freed AICA memory is reusable but not zeroed. Use `reset` to clear it.
 
-Use `reset` when a clean experiment matters, after an interrupted upload, or
-to recover from uncertain DSP/instance state:
+To clear assets, uploads and playback state:
 
 ```sh
 python3 tools/tuner/client.py --host "$DCTOOL_HOST" reset
@@ -100,7 +91,5 @@ ring. Its fixed and dynamic regions are documented in [Memory layout](memory.md)
 Each request is one TCP connection and has a fixed 16-byte little-endian
 header: magic `AFT1`, protocol version, opcode, nonzero sequence and payload
 size. The response repeats the opcode with bit 15 set and begins with a signed
-AICAflow result. `ping` returns the highest opcode implemented by the target;
-the current value is 27 (`reset`). The server bounds staged files to 4 MiB and
-the client uses acknowledged 32 KiB upload chunks, which avoids the BBA's
-unreliable large-write path.
+AICAflow result. `ping` returns the highest supported opcode: 27 (`reset`).
+Staged files are limited to 4 MiB; uploads use acknowledged 32 KiB chunks.

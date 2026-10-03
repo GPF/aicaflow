@@ -1,12 +1,9 @@
 # AICAflow runtime contract
 
-The maintained runtime contract is in
-[`docs/specs/runtime.md`](../docs/specs/runtime.md), with file formats and
-sidecars in [`docs/specs/assets.md`](../docs/specs/assets.md). Keeping the
-human-readable contract there makes it available with the rest of the release
-documentation rather than split between source and docs.
+See [Runtime ABI](../docs/specs/runtime.md) for ownership and execution,
+and [Assets and sidecars](../docs/specs/assets.md) for file layouts.
 
-The numeric authority remains the checked-in headers:
+The headers define the numeric contract:
 
 - [`include/aicaflow/protocol.h`](include/aicaflow/protocol.h) — ARM7/SH-4 ABI,
   control region and binary format constants.

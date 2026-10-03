@@ -1,8 +1,8 @@
 
 # Persistent tuner server
 
-This is a BBA development target, not an application example. Build it from
-the repository root with:
+The tuner receives assets and DSP programs over BBA while staying resident on
+Dreamcast. Build from the repository root:
 
 ```sh
 source /opt/toolchains/dc/kos/environ.sh
