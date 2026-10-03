@@ -146,3 +146,6 @@ No whitespace errors (`git diff --check` clean).
 
 Yes — ELF builds, no ARM7 changes, no API changes, serial markers are clear.
 Run on Dreamcast and capture audio for analysis.
+
+## Errata (KOS timer, found later)
+`timer_us_gettime64()` in KOS runs 0.25% slow and steps forward ~2.5 ms once per real second (TMU2 ticks are converted at 80 ns but are really 80.2 ns; see `aica-ring-mode-a.md`). The ramp's due/sent/late timestamps used it, so a 2.5 ms step can land inside the 234 ms ramp and the 15.625 ms step spacing carries a 0.25% slope error. Also the example uses `DIRECT = 0x0f00 | 15` (hard pan, not centre).

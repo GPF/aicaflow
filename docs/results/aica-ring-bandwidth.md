@@ -58,3 +58,6 @@ burst of continuous G2 writes did not slow the cursor. By ear: **NOT YET REPORTE
 ## Next (per plan)
 Mode A: 60 s refill loop with a phase-continuous sine and generation tracking, then
 Mode B and a deliberate underrun, then stereo/phase-lock questions.
+
+## Errata (KOS timer, found later)
+`timer_us_gettime64()` in KOS runs 0.25% slow and steps forward ~2.5 ms once per real second (TMU2 ticks are converted at 80 ns but are really 80.2 ns; see `aica-ring-mode-a.md`). Upload times and KB/s here were measured with it: the ~0.25% slope error is negligible, but an occasional single call looks 2.5 ms longer when a second boundary falls inside it (seen once as a 3862 us outlier with a matching -110 frame cursor deviation). It was a clock step, not a bus stall or an AICA freeze. Bandwidth conclusions stand. The example now uses a corrected clock.

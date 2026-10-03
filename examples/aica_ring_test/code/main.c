@@ -8,7 +8,11 @@
  * upload time per call, throughput, back-to-back burst throughput, and whether
  * the playback cursor keeps pace with wall time while G2 is busy.
  *
- * NOT in this phase: the refill loop, underrun detection, stereo, any new API.
+ * Phase 2 (Mode A): 60 s refill loop - phase-continuous 440 Hz sine, per-half
+ * generation tracking, cursor polled every 5 ms, a half is rewritten only after the
+ * cursor has fully left it, guard frames mirrored whenever ring frames 0..3 change.
+ *
+ * NOT here: deliberate underrun, stereo, mGBA load, any public API.
  * Bandwidth alone does not establish streaming viability.
  *
  * Cursor read: 32-bit RMW of 0xa070280c + 50 us settle under g2_lock(); see
@@ -43,6 +47,18 @@ enum {
     ISO_REPS = 24, BURST_COUNT = 16, BURST_REPS = 4,
     SELECT_SETTLE_US = 50
 };
+
+
+/* KOS's timer_us_gettime64() is not linear: arch_timer_gettime() converts TMU2 ticks
+ * at 80 ns each, but the real tick is 4 / 49.87488 MHz = 80.2 ns and TMU2 reloads once
+ * per real second (12,468,720 ticks).  So the reading runs 0.25% slow and snaps forward
+ * ~2.5 ms every second (110 AICA frames) - the once-per-second "cursor anomaly".
+ * Use the tick count against the true tick rate instead. */
+#define TMU2_TICKS_PER_SEC 12468720.0
+static inline uint64_t now_us(void) {
+    timer_val_t v = __dreamcast_get_ticks();
+    return (uint64_t)v.secs * 1000000u + (uint64_t)((double)v.ticks * (1000000.0 / TMU2_TICKS_PER_SEC));
+}
 
 alignas(32) static uint8_t bank_file[AFX_BANK_HEADER_BYTES + BANK_BYTES];
 alignas(32) static uint8_t ring_pcm[RING_BYTES];    /* master copy, also the upload source */
@@ -83,7 +99,7 @@ static int build_flow(const afx_bank_t *bank, afx_asset_t *out_flow) {
     fields[AFX_FIELD_LOOP_END] = RING_FRAMES - 1;
     fields[AFX_FIELD_ENV_AD] = 0x001f;
     fields[AFX_FIELD_ENV_DR] = 0x001f;
-    fields[AFX_FIELD_DIRECT] = 0x0f00u | 15u;
+    fields[AFX_FIELD_DIRECT] = 0x0f00u;   /* pan 0 = centre (15 is a hard pan; user heard right ear only) */
     fields[AFX_FIELD_MIX] = 0x0024;
     for (unsigned f = AFX_FIELD_FILTER_LEVEL0; f <= AFX_FIELD_FILTER_LEVEL4; ++f)
         fields[f] = 0x1fff;
@@ -147,11 +163,13 @@ static uint32_t cursor_read(unsigned channel) {
 }
 
 /* Cursor plus a timestamp at the middle of the read (+-~50 us, ~+-2 samples). */
+static uint32_t g_read_us;      /* duration of the most recent cursor_at() */
 static uint32_t cursor_at(unsigned ch, uint64_t *t_mid) {
-    uint64_t a = timer_us_gettime64();
+    uint64_t a = now_us();
     uint32_t pos = cursor_read(ch);
-    uint64_t b = timer_us_gettime64();
+    uint64_t b = now_us();
     *t_mid = (a + b) / 2;
+    g_read_us = (uint32_t)(b - a);
     return pos;
 }
 
@@ -181,6 +199,327 @@ static bool verify_region(uint32_t spu_addr, uint32_t bytes) {
     return ok;
 }
 
+
+/* ------------------------------------------------------------------------- */
+/* Mode A: live refill correctness (mono, 60 s, continuous 440 Hz sine).     */
+/* ------------------------------------------------------------------------- */
+
+#ifndef MODE_A_MS
+#define MODE_A_MS 60000
+#endif
+enum {
+    HALF_FRAMES = RING_FRAMES / 2,
+    POLL_US = 5000,
+    LATE_FRAMES = 512,          /* refill started > 11.6 ms after its half became free */
+    DANGER_FRAMES = 1024,       /* < 23 ms of valid audio ahead of the playhead */
+    ANOMALY_FRAMES = 32         /* cursor advance vs wall clock tolerance per poll */
+};
+
+alignas(32) static int16_t half_buf[HALF_FRAMES];
+alignas(32) static int16_t init_buf[RING_FRAMES + GUARD_FRAMES];
+static float g_phase;
+
+static void gen_frames(int16_t *out, uint32_t n) {
+    const float two_pi = 6.2831853f, inc = two_pi * 440.0f / 44100.0f;
+    float ph = g_phase;
+    for (uint32_t i = 0; i < n; i++) {
+        out[i] = (int16_t)(12000.0f * sinf(ph));
+        ph += inc;
+        if (ph >= two_pi) ph -= two_pi;
+    }
+    g_phase = ph;
+}
+
+static bool ram_equals(uint32_t spu_addr, const void *want, uint32_t bytes) {
+    const uint8_t *w = want;
+    g2_ctx_t ctx = g2_lock();
+    bool ok = true;
+    for (uint32_t i = 0; i < bytes && ok; i += 4) {
+        uint32_t v; memcpy(&v, w + i, 4);
+        if (g2_read_32(SPU_RAM_SH4 + spu_addr + i) != v) ok = false;
+    }
+    g2_unlock(ctx);
+    return ok;
+}
+
+/* Guard frames (ring[4096..4099]) must always equal ring[0..3] in AICA RAM. */
+static bool guard_consistent(uint32_t base) {
+    g2_ctx_t ctx = g2_lock();
+    bool ok = true;
+    for (int i = 0; i < 2; i++)
+        if (g2_read_32(SPU_RAM_SH4 + base + i * 4) !=
+            g2_read_32(SPU_RAM_SH4 + base + RING_FRAMES * 2 + i * 4)) ok = false;
+    g2_unlock(ctx);
+    return ok;
+}
+
+
+#ifdef MODEA_DENSE
+/* Dense read window: read the cursor back-to-back (~100 us each) and log time vs
+ * position, to tell a real cursor freeze from a timer discontinuity. */
+static void dense_window(unsigned ch, uint64_t t_end_us, int idx) {
+    static uint64_t tt[512]; static uint32_t pp[512];
+    uint32_t n = 0;
+    while (n < 512) {
+        uint32_t pos = cursor_read(ch);
+        uint64_t t = now_us();
+        tt[n] = t; pp[n] = pos; n++;
+        if (t >= t_end_us) break;
+    }
+    double sum_exp = 0, sum_adv = 0, worst = 0; uint32_t worst_i = 1, max_dt_i = 1, notable = 0;
+    uint64_t max_dt = 0;
+    for (uint32_t i = 1; i < n; i++) {
+        uint64_t dt = tt[i] - tt[i - 1];
+        uint32_t adv = pp[i] >= pp[i - 1] ? pp[i] - pp[i - 1] : pp[i] + RING_FRAMES - pp[i - 1];
+        double exp = (double)dt * 0.0441, res = (double)adv - exp;
+        sum_exp += exp; sum_adv += adv;
+        if ((res < 0 ? -res : res) > (worst < 0 ? -worst : worst)) { worst = res; worst_i = i; }
+        if (dt > max_dt) { max_dt = dt; max_dt_i = i; }
+    }
+    printf("DENSE window=%d reads=%lu span_us=%lu sum_adv=%.0f sum_expected=%.1f net_deficit=%.1f "
+           "worst_residual=%.1f at_i=%lu max_dt_us=%lu at_i=%lu\n", idx, (unsigned long)n,
+           (unsigned long)(tt[n - 1] - tt[0]), sum_adv, sum_exp, sum_exp - sum_adv, worst,
+           (unsigned long)worst_i, (unsigned long)max_dt, (unsigned long)max_dt_i);
+    uint32_t lo = worst_i > 6 ? worst_i - 6 : 1, hi = worst_i + 6 < n ? worst_i + 6 : n - 1;
+    for (uint32_t i = lo; i <= hi; i++) {
+        uint64_t dt = tt[i] - tt[i - 1];
+        uint32_t adv = pp[i] >= pp[i - 1] ? pp[i] - pp[i - 1] : pp[i] + RING_FRAMES - pp[i - 1];
+        printf("  d%d i=%lu t_rel_us=%lu pos=%lu dt_us=%lu adv=%lu expected=%.1f residual=%.1f\n", idx,
+               (unsigned long)i, (unsigned long)(tt[i] - tt[0]), (unsigned long)pp[i], (unsigned long)dt,
+               (unsigned long)adv, (double)dt * 0.0441, (double)adv - (double)dt * 0.0441);
+        notable++;
+    }
+    (void)notable;
+}
+#endif
+
+static int run_mode_a(afx_instance_t inst, uint32_t base, unsigned ch) {
+    printf("MODE_A_BEGIN duration_ms=%d half_frames=%d poll_us=%d late_frames=%d danger_frames=%d\n",
+           MODE_A_MS, HALF_FRAMES, POLL_US, LATE_FRAMES, DANGER_FRAMES);
+
+    /* Fill the whole ring (+guard) with stream frames 0..4095, phase-continuous. */
+    g_phase = 0.0f;
+    gen_frames(init_buf, RING_FRAMES);
+    memcpy(init_buf + RING_FRAMES, init_buf, GUARD_FRAMES * sizeof(int16_t));
+    int r = afx_mem_upload(base, init_buf, sizeof(init_buf));
+    if (r || !ram_equals(base, init_buf, sizeof(init_buf))) {
+        printf("MODE_A_FAIL initial fill (%d)\n", r);
+        return 0;
+    }
+
+    /* Sync to a ring wrap so lap accounting starts with the cursor near frame 0. */
+    uint64_t t_last; uint32_t last = cursor_at(ch, &t_last), pos = last;
+    uint64_t sync_deadline = now_us() + 1000000u;
+    bool synced = false;
+    while (now_us() < sync_deadline) {
+        uint64_t t;
+        thd_pass();
+        pos = cursor_at(ch, &t);
+        if (pos < last && pos < 512) { t_last = t; synced = true; break; }
+        last = pos; t_last = t;
+        timer_spin_delay_us(1500);
+    }
+    if (!synced) { printf("MODE_A_FAIL could not sync to ring wrap\n"); return 0; }
+
+#ifdef MODEA_NO_REFILL
+    uint64_t play_abs = pos, prod = (uint64_t)1 << 40;   /* never an underrun */
+#else
+    uint64_t play_abs = pos, prod = RING_FRAMES;
+#endif
+    uint32_t gen[2] = {0, 1};
+    last = pos;
+
+    uint32_t refills = 0, guard_updates = 0, late = 0, underruns = 0, gen_errors = 0,
+             cursor_anoms = 0, inst_errors = 0, guard_bad = 0, verify_errors = 0,
+             poll_stalls = 0, polls = 0, max_upload_us = 0, max_gen_us = 0, max_poll_gap_us = 0;
+    int64_t min_margin = (int64_t)(prod - play_abs);
+    int64_t max_lateness = 0;
+    uint64_t busy_us = 0, upload_total_us = 0;
+    bool in_underrun = false, in_generr = false;
+    struct { uint32_t pos, adv, rd_us; uint32_t dt_us; double exp; uint64_t t_ms; } hist[8];
+    uint32_t hist_n = 0, trail = 0, anomaly_dumps = 0;
+#ifdef MODEA_DENSE
+    uint64_t dense_t_event = 0; int dense_done = 0;
+#endif
+
+    uint64_t t_start = now_us(), next_poll = t_start + POLL_US, next_progress = t_start + 5000000u;
+    uint64_t t_prev_poll = t_start;
+    uint64_t wall_end = t_start + (uint64_t)MODE_A_MS * 1000u;
+
+    while (now_us() < wall_end) {
+#ifdef MODEA_SPIN_POLL
+        while (now_us() < next_poll) { }
+#else
+        while (now_us() < next_poll) thd_pass();
+#endif
+#ifdef MODEA_DENSE
+        if (dense_t_event && dense_done < 3) {
+            uint64_t target = dense_t_event + (uint64_t)(dense_done + 1) * 1000000u;
+            if (now_us() + 10000u >= target) {
+                dense_window(ch, target + 4000u, dense_done + 1);
+                dense_done++;
+                next_poll = now_us() + POLL_US;
+                if (dense_done == 3) wall_end = 0;       /* done: leave the loop */
+            }
+        }
+#endif
+        uint64_t now0 = now_us();
+        if (now0 > next_poll + 20000u) poll_stalls++;
+        if (now0 - t_prev_poll > max_poll_gap_us) max_poll_gap_us = (uint32_t)(now0 - t_prev_poll);
+        t_prev_poll = now0;
+        next_poll += POLL_US;
+        polls++;
+
+        /* 1. cursor, unwrapped */
+        uint64_t tm;
+        pos = cursor_at(ch, &tm);
+        busy_us += now_us() - now0;
+        uint32_t adv = pos >= last ? pos - last : pos + RING_FRAMES - last;
+        double exp_adv = (double)(tm - t_last) * 0.0441;
+        if (pos >= RING_FRAMES || tm - t_last > 80000u ||
+            ((double)adv - exp_adv > ANOMALY_FRAMES || exp_adv - (double)adv > ANOMALY_FRAMES)) {
+            cursor_anoms++;
+#ifndef MODEA_QUIET
+            if (cursor_anoms <= 5)
+                printf("CURSOR_ANOMALY pos=%lu last=%lu adv=%lu expected=%.1f dt_us=%lu\n",
+                       (unsigned long)pos, (unsigned long)last, (unsigned long)adv, exp_adv,
+                       (unsigned long)(tm - t_last));
+#endif
+        }
+        {
+            uint32_t hi = hist_n++ & 7;
+            hist[hi].pos = pos; hist[hi].adv = adv; hist[hi].rd_us = g_read_us;
+            hist[hi].dt_us = (uint32_t)(tm - t_last); hist[hi].exp = exp_adv; hist[hi].t_ms = (tm - t_start) / 1000u;
+            bool is_anom = pos >= RING_FRAMES || tm - t_last > 80000u ||
+                ((double)adv - exp_adv > ANOMALY_FRAMES || exp_adv - (double)adv > ANOMALY_FRAMES);
+#ifdef MODEA_DENSE
+            if (is_anom && !dense_t_event) dense_t_event = tm;
+#endif
+#ifdef MODEA_QUIET
+            if (is_anom) anomaly_dumps = 99;
+#endif
+            if (is_anom && anomaly_dumps < 4) {
+                anomaly_dumps++; trail = 3;
+                printf("ANOMALY_CONTEXT #%lu (oldest first, last entry is the anomaly)\n", (unsigned long)anomaly_dumps);
+                for (uint32_t k = 6; k > 0; k--) {
+                    uint32_t j = (hist_n - 1 - (k - 1)) & 7;
+                    if (hist_n >= k) printf("  t_ms=%llu pos=%lu adv=%lu expected=%.1f dt_us=%lu read_us=%lu\n",
+                        (unsigned long long)hist[j].t_ms, (unsigned long)hist[j].pos, (unsigned long)hist[j].adv,
+                        hist[j].exp, (unsigned long)hist[j].dt_us, (unsigned long)hist[j].rd_us);
+                }
+            } else if (trail) {
+                trail--;
+                printf("  +after t_ms=%llu pos=%lu adv=%lu expected=%.1f dt_us=%lu read_us=%lu\n",
+                       (unsigned long long)hist[hi].t_ms, (unsigned long)pos, (unsigned long)adv, exp_adv,
+                       (unsigned long)hist[hi].dt_us, (unsigned long)g_read_us);
+            }
+        }
+        play_abs += adv; last = pos; t_last = tm;
+
+        /* 2. margin / underrun / generation ownership */
+        int64_t margin = (int64_t)(prod - play_abs);
+        if (margin < min_margin) min_margin = margin;
+        if (margin <= 0) { if (!in_underrun) { underruns++; printf("UNDERRUN play_abs=%llu prod=%llu\n", (unsigned long long)play_abs, (unsigned long long)prod); } in_underrun = true; }
+        else in_underrun = false;
+        uint64_t cur_half = play_abs / HALF_FRAMES;
+        if (gen[cur_half & 1] != (uint32_t)cur_half) {
+            if (!in_generr) { gen_errors++; printf("GEN_ERROR cursor_half=%llu ring_half=%u has_generation=%lu\n", (unsigned long long)cur_half, (unsigned)(cur_half & 1), (unsigned long)gen[cur_half & 1]); }
+            in_generr = true;
+        } else in_generr = false;
+
+        /* 3. refill every half the cursor has fully left */
+#ifndef MODEA_NO_REFILL
+        for (;;) {
+            uint64_t K = prod / HALF_FRAMES;                  /* next stream half to produce */
+            uint64_t free_at = (K - 1) * HALF_FRAMES;         /* cursor leaves stream half K-2 here */
+            if (play_abs < free_at) break;
+            int64_t lateness = (int64_t)(play_abs - free_at);
+            if (lateness > max_lateness) max_lateness = lateness;
+            if (lateness > LATE_FRAMES) late++;
+
+            uint64_t g0 = now_us();
+            gen_frames(half_buf, HALF_FRAMES);
+            uint64_t g1 = now_us();
+            uint32_t half = (uint32_t)(K & 1);
+            uint32_t addr = base + half * HALF_FRAMES * 2;
+            int ur = afx_mem_upload(addr, half_buf, HALF_FRAMES * 2);
+            if (half == 0 && !ur) {                            /* ring[0..3] changed: mirror guard */
+                ur = afx_mem_upload(base + RING_FRAMES * 2, half_buf, GUARD_FRAMES * 2);
+                guard_updates++;
+            }
+            uint64_t g2t = now_us();
+            if (ur) { verify_errors++; printf("UPLOAD_ERROR %d\n", ur); }
+            gen[half] = (uint32_t)K;
+            prod += HALF_FRAMES;
+            refills++;
+
+            /* spot checks: first/middle/last word of the half; guard mirror; occasional full verify */
+            bool vok = ram_equals(addr, half_buf, 4) &&
+                       ram_equals(addr + HALF_FRAMES, (uint8_t *)half_buf + HALF_FRAMES, 4) &&
+                       ram_equals(addr + HALF_FRAMES * 2 - 4, (uint8_t *)half_buf + HALF_FRAMES * 2 - 4, 4);
+            if (refills <= 2 || refills % 128 == 0) vok = vok && ram_equals(addr, half_buf, HALF_FRAMES * 2);
+            if (!vok) { verify_errors++; printf("VERIFY_ERROR refill=%lu half=%lu\n", (unsigned long)refills, (unsigned long)half); }
+            if (!guard_consistent(base)) { guard_bad++; printf("GUARD_MISMATCH refill=%lu\n", (unsigned long)refills); }
+            uint64_t g3 = now_us();
+
+            uint32_t up_us = (uint32_t)(g2t - g1), gen_us = (uint32_t)(g1 - g0);
+            if (up_us > max_upload_us) max_upload_us = up_us;
+            if (gen_us > max_gen_us) max_gen_us = gen_us;
+            upload_total_us += up_us;
+            busy_us += g3 - g0;
+            if (refills <= 3)
+                printf("REFILL n=%lu K=%llu half=%lu lateness=%lld gen_us=%lu upload_us=%lu margin_after=%lld\n",
+                       (unsigned long)refills, (unsigned long long)K, (unsigned long)half, (long long)lateness,
+                       (unsigned long)gen_us, (unsigned long)up_us, (long long)(prod - play_abs));
+        }
+#endif
+
+        /* 4. AFX instance health (every 5th poll = 25 ms) */
+#ifndef MODEA_NO_AFX_UPDATE
+        if (polls % 5 == 0) {
+            afx_instance_status_t st = {0};
+            if (afx_update() < 0 || afx_instance_status(inst, &st) || st.state != AFX_PARKED) inst_errors++;
+        }
+#endif
+
+        if (now_us() >= next_progress) {
+            next_progress += 5000000u;
+            printf("PROGRESS t_s=%lu refills=%lu min_margin=%lld max_lateness=%lld late=%lu underruns=%lu anomalies=%lu\n",
+                   (unsigned long)((now_us() - t_start) / 1000000u), (unsigned long)refills,
+                   (long long)min_margin, (long long)max_lateness, (unsigned long)late,
+                   (unsigned long)underruns, (unsigned long)cursor_anoms);
+        }
+    }
+
+    uint64_t t_end = now_us();
+    uint32_t duration_ms = (uint32_t)((t_end - t_start) / 1000u);
+    double ratio = (double)play_abs / ((double)(t_end - t_start) * 0.0441);
+    uint32_t expected_refills = (uint32_t)((uint64_t)duration_ms * 441u / 10u / HALF_FRAMES);
+    bool completed = duration_ms >= (uint32_t)(MODE_A_MS - 100) && refills + 3 >= expected_refills;
+    bool pass = completed && underruns == 0 && late == 0 && gen_errors == 0 && cursor_anoms == 0 &&
+                inst_errors == 0 && guard_bad == 0 && verify_errors == 0 && min_margin >= DANGER_FRAMES;
+
+    printf("MODE_A_SUMMARY\n");
+    printf("duration_ms=%lu\n", (unsigned long)duration_ms);
+    printf("refills=%lu (expected~%lu)\n", (unsigned long)refills, (unsigned long)expected_refills);
+    printf("polls=%lu poll_stalls=%lu max_poll_gap_us=%lu\n", (unsigned long)polls, (unsigned long)poll_stalls, (unsigned long)max_poll_gap_us);
+    printf("min_margin_samples=%lld (danger<%d)\n", (long long)min_margin, DANGER_FRAMES);
+    printf("max_lateness_samples=%lld (late>%d)\n", (long long)max_lateness, LATE_FRAMES);
+    printf("max_upload_us=%lu avg_upload_us=%.1f max_gen_us=%lu\n", (unsigned long)max_upload_us,
+           refills ? (double)upload_total_us / refills : 0.0, (unsigned long)max_gen_us);
+    printf("late_refills=%lu\n", (unsigned long)late);
+    printf("underruns=%lu\n", (unsigned long)underruns);
+    printf("generation_errors=%lu\n", (unsigned long)gen_errors);
+    printf("guard_updates=%lu guard_mismatches=%lu\n", (unsigned long)guard_updates, (unsigned long)guard_bad);
+    printf("verify_errors=%lu\n", (unsigned long)verify_errors);
+    printf("cursor_errors=%lu\n", (unsigned long)cursor_anoms);
+    printf("instance_errors=%lu\n", (unsigned long)inst_errors);
+    printf("sh4_cursor_refill_busy_pct=%.2f aica_vs_sh4_clock_ratio=%.5f\n",
+           100.0 * (double)busy_us / (double)(t_end - t_start), ratio);
+    printf(pass ? "MODE_A_PASS\n" : "MODE_A_FAIL\n");
+    return pass;
+}
+
 #define CHECK(name, ok) do { printf("CHECK %s: %s\n", name, (ok) ? "PASS" : "FAIL"); \
                              if (!(ok)) all_ok = 0; } while (0)
 
@@ -196,7 +535,7 @@ int main(int argc, char **argv) {
     afx_instance_t inst = 0;
     int result = 0, all_ok = 1;
 
-    printf("AICA_RING_TEST_BEGIN phase=bandwidth_sweep\n");
+    printf("AICA_RING_TEST_BEGIN phases=bandwidth_sweep,mode_a\n");
     make_ring();
     result = afx_init(firmware, sizeof(firmware));
     if (!result) result = load_bank(&bank);
@@ -223,7 +562,12 @@ int main(int argc, char **argv) {
     double worst_dev = 0;
     uint32_t bad_state = 0;
 
-    for (unsigned si = 0; si < 4; si++) {
+#ifdef RING_SKIP_SWEEP
+#define NSIZES 0
+#else
+#define NSIZES 4
+#endif
+    for (unsigned si = 0; si < NSIZES; si++) {
         uint32_t frames = sizes[si], bytes = frames * 2u;
         uint32_t umin = UINT32_MAX, umax = 0; uint64_t usum = 0;
         double dev_max_abs = 0;
@@ -232,9 +576,9 @@ int main(int argc, char **argv) {
         for (int rep = 0; rep < ISO_REPS; rep++) {
             uint64_t tb, ta;
             uint32_t cb = cursor_at(ch, &tb);
-            uint64_t t0 = timer_us_gettime64();
+            uint64_t t0 = now_us();
             int r = afx_mem_upload(base, ring_pcm, bytes);
-            uint64_t t1 = timer_us_gettime64();
+            uint64_t t1 = now_us();
             uint32_t ca = cursor_at(ch, &ta);
             if (r) { upload_fail = true; printf("  upload FAIL (%d)\n", r); }
             uint32_t us = (uint32_t)(t1 - t0);
@@ -244,6 +588,16 @@ int main(int argc, char **argv) {
             uint32_t adv; double exp, dev;
             bool ok = cursor_dev(cb, tb, ca, ta, &adv, &exp, &dev);
             if (!ok) amb_any = true; else if (dev < 0 ? -dev > dev_max_abs : dev > dev_max_abs) dev_max_abs = dev < 0 ? -dev : dev;
+            {
+                double ad = ok ? (dev < 0 ? -dev : dev) : 0.0;
+                static int outlier_prints;
+                if (rep >= 1 && (us > umin + umin / 4 + 20 || ad > 12.0) && outlier_prints++ < 12)
+                    printf("OUTLIER size_frames=%lu rep=%d us=%lu (min so far %lu) cursor_before=%lu cursor_after=%lu "
+                           "advanced=%lu expected=%.1f dev=%.1f t_gap_us=%lu\n",
+                           (unsigned long)frames, rep, (unsigned long)us, (unsigned long)umin,
+                           (unsigned long)cb, (unsigned long)ca, (unsigned long)adv, exp, ok ? dev : 0.0,
+                           (unsigned long)(ta - tb));
+            }
             if (rep < 3)
                 printf("UPLOAD size_frames=%lu rep=%d us=%lu cursor_before=%lu cursor_after=%lu "
                        "cursor_advanced=%lu expected=%.1f dev=%.1f\n",
@@ -271,10 +625,10 @@ int main(int argc, char **argv) {
             uint64_t tb, ta;
             uint32_t cb = cursor_at(ch, &tb);
             uint32_t call_max = 0;
-            uint64_t s0 = timer_us_gettime64(), prev = s0;
+            uint64_t s0 = now_us(), prev = s0;
             for (int k = 0; k < BURST_COUNT; k++) {
                 int r = afx_mem_upload(base, ring_pcm, bytes);
-                uint64_t now = timer_us_gettime64();
+                uint64_t now = now_us();
                 if (r) upload_fail = true;
                 if ((uint32_t)(now - prev) > call_max) call_max = (uint32_t)(now - prev);
                 prev = now;
@@ -318,6 +672,14 @@ int main(int argc, char **argv) {
     CHECK("no_ambiguous_cursor_intervals", !amb_any);
     printf("NOTE worst cursor deviation %.1f samples (read resolution ~+-3 samples)\n", worst_dev);
 
+    printf("SWEEP_RESULT %s\n", all_ok ? "PASS" : "FAIL (see CHECK lines)");
+#ifndef RING_SKIP_MODE_A
+    /* Mode A depends on correct uploads and read-back, not on sweep timing outliers. */
+    if (ram_ok && !upload_fail && !verify_fail && bad_state == 0) {
+        if (!run_mode_a(inst, base, ch)) all_ok = 0;
+    } else { printf("MODE_A_SKIPPED (uploads/readback/state not clean)\n"); all_ok = 0; }
+#endif
+
 done:
     {
         int rr = release_voice(inst, flow);
@@ -325,7 +687,7 @@ done:
         if (!result) result = rr;
     }
     afx_shutdown();
-    printf("%s\n", (!result && all_ok) ? "RING_BW_SWEEP_DONE (bandwidth only; streaming viability NOT claimed)"
+    printf("%s\n", (!result && all_ok) ? "AICA_RING_TEST_DONE (sweep + Mode A; behaviour under real load NOT claimed)"
                                        : "AICA_RING_TEST_FAIL");
     printf("AICA_RING_TEST_END\n");
     return (!result && all_ok) ? 0 : 1;
