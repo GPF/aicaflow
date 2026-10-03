@@ -5,6 +5,12 @@
 
 #include <aicaflow/protocol.h>
 
+/* Ticks per second as a rational (num/den). Authoring uses the AICA Timer-A time base,
+ * 11025/11 (44 samples per tick, ~1002.27 Hz); see protocol.h. An explicit 1000/1 is only
+ * for tests that want round numbers. */
+typedef struct { uint32_t num, den; } afx_c_tick_rate_t;
+#define AFX_C_TICK_RATE ((afx_c_tick_rate_t){AFX_TICK_RATE_NUM, AFX_TICK_RATE_DEN})
+
 typedef struct {
     uint32_t start_tick, end_tick;
     uint8_t key, velocity;
@@ -99,7 +105,7 @@ int afx_c_assign_channels(const afx_c_note_t *notes, uint32_t count,
 /* Every note must select exactly one key range. The zones become the AFB's
  * contiguous, 32-byte aligned samples and the AFX setup dictionary. */
 int afx_c_compile_zones(const afx_c_note_t *notes, uint32_t count,
-                        uint32_t tick_rate, const afx_c_zone_t *zones,
+                        afx_c_tick_rate_t tick_rate, const afx_c_zone_t *zones,
                         uint32_t zone_count, afx_c_output_t *out);
 
 /* Assemble a bank-bound AFX from already-resolved NOTE, PATCH and KEYOFF
@@ -107,20 +113,20 @@ int afx_c_compile_zones(const afx_c_note_t *notes, uint32_t count,
  * An optional final PARK at duration_ticks emits a controlled flow without
  * song-only seek/visual sidecars, including a NOTE/PARK at tick zero. */
 int afx_c_compile_events(const afx_c_event_t *events, uint32_t count,
-                         uint32_t duration_ticks, uint32_t tick_rate,
+                         uint32_t duration_ticks, afx_c_tick_rate_t tick_rate,
                          const afx_c_zone_t *zones, uint32_t zone_count,
                          afx_c_output_t *out);
 
 /* Compile a resolved timeline against one explicit sample. All output sidecars
  * are allocated with the AFB/AFX pair and released by afx_c_output_free(). */
 int afx_c_compile_sample(const afx_c_note_t *notes, uint32_t count,
-                         uint32_t tick_rate, const afx_c_sample_t *sample,
+                         afx_c_tick_rate_t tick_rate, const afx_c_sample_t *sample,
                          afx_c_output_t *out);
 
 /* Compile a resolved monophonic/polyphonic note timeline using the built-in
  * sine source. The caller owns out through afx_c_output_free(). */
 int afx_c_compile_sine(const afx_c_note_t *notes, uint32_t count,
-                       uint32_t tick_rate, afx_c_output_t *out);
+                       afx_c_tick_rate_t tick_rate, afx_c_output_t *out);
 /* Make a VIZ1 sidecar from the final AFX command stream.  This deliberately
  * follows emitted NOTE, PATCH and KEYOFF commands rather than a parallel MIDI
  * approximation, so it remains aligned with offline AFP transforms. */

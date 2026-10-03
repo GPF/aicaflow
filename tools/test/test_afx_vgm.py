@@ -45,6 +45,7 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run([str(TOOL), str(source), str(output)], check=True)
     afb, afc, afv = (output.with_suffix(suffix) for suffix in (".afb", ".afc", ".afv"))
     assert output.read_bytes()[:4] == b"AFX2"
+    assert struct.unpack_from("<2I", output.read_bytes(), 68) == (11025, 11), "VGM-imported AFX must use the Timer-A tick rate"
     assert afb.read_bytes()[:4] == b"AFB\0"
     assert afc.read_bytes()[:4] == b"AFC\0"
     assert afv.read_bytes()[:4] == b"VIZ1"

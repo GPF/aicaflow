@@ -111,7 +111,7 @@ static int build_flow(const afx_bank_t *bank, uint32_t wait_ticks, afx_asset_t *
     afx_write32(file + 24, AFX_SETUP_BYTES); afx_write32(file + 28, written);
     afx_write32(file + 36, 1); afx_write32(file + 40, bank->id.low); afx_write32(file + 44, bank->id.high);
     afx_write32(file + 48, 80); afx_write32(file + 52, 1);
-    afx_write32(file + 64, 1); afx_write32(file + 68, 1000); afx_write32(file + 72, 1);   /* tick rate 1000/1 */
+    afx_write32(file + 64, 1); afx_write32(file + 68, AFX_TICK_RATE_NUM); afx_write32(file + 72, AFX_TICK_RATE_DEN);   /* AICA Timer-A time base */
     afx_write32(file + 80, 0); afx_write32(file + 84, 0); afx_write32(file + 88, RING_BYTES);
     for (unsigned f = 0; f < AFX_FIELD_COUNT; ++f) afx_write16(file + 96 + f * 2u, fields[f]);
     memcpy(file + 96 + AFX_SETUP_BYTES, stream, written);
@@ -151,7 +151,9 @@ static uint32_t cursor_read(unsigned channel) {
 }
 
 /* Returns 1 on a clean measurement; fills the result fields. */
-static int measure(const afx_bank_t *bank, uint32_t wait_ticks, double *out_hz, int64_t *out_frames) {
+static int measure(const afx_bank_t *bank, uint32_t seconds, double *out_hz, int64_t *out_frames) {
+    /* Author the wait in REAL time through the shared time base (the fix under test). */
+    const uint32_t wait_ticks = (uint32_t)afx_usec_to_ticks((uint64_t)seconds * 1000000u);
     afx_asset_t flow = 0; afx_instance_t inst = 0;
     int r = build_flow(bank, wait_ticks, &flow);
     if (r) { printf("build_flow FAIL (%d)\n", r); return 0; }
@@ -211,9 +213,10 @@ static int measure(const afx_bank_t *bank, uint32_t wait_ticks, double *out_hz, 
     printf("FLOWTIME_RATE_CHANGE polls=%lu F_prev=%lld F_now=%lld adv=%lu baseline_adv=%.1f ticks_since_start=%lu\n",
            (unsigned long)polls, (long long)F_change_prev, (long long)F_change_now, (unsigned long)change_adv,
            change_base, (unsigned long)(ticks_at_change - ticks_start));
-    printf("FLOWTIME_RESULT authored_ticks=%lu measured_frames=%.0f (+-%.0f) expected_1000Hz=%.0f expected_1002.27Hz=%.0f "
-           "implied_tick_hz=%.3f frames_per_tick=%.4f\n",
-           (unsigned long)wait_ticks, F_mid, F_half, wait_ticks * 44.1, wait_ticks * 44.0, hz, F_mid / wait_ticks);
+    printf("FLOWTIME_RESULT authored_seconds=%lu authored_ticks=%lu measured_frames=%.0f (+-%.0f) expected_frames=%.0f "
+           "err=%+.4f%% implied_tick_hz=%.3f frames_per_tick=%.4f\n",
+           (unsigned long)seconds, (unsigned long)wait_ticks, F_mid, F_half, seconds * 44100.0,
+           100.0 * (F_mid - seconds * 44100.0) / (seconds * 44100.0), hz, F_mid / wait_ticks);
     *out_hz = hz; *out_frames = (int64_t)F_mid;
     ok = 1;
 out:
@@ -235,21 +238,23 @@ int main(int argc, char **argv) {
     if (!result) result = load_bank(&bank);
     if (result) { printf("setup FAIL (%d)\n", result); all_ok = 0; goto done; }
 
-    static const uint32_t waits[] = {10000, 20000};
+    static const uint32_t waits[] = {10, 20};          /* authored seconds */
     double hz[2] = {0, 0}; int64_t fr[2] = {0, 0};
     for (int i = 0; i < 2; i++) {
         if (!measure(&bank, waits[i], &hz[i], &fr[i])) { all_ok = 0; break; }
     }
     if (all_ok) {
+        /* PASS: authored time agrees with AICA audio time within 0.05% (the residual 0.02-0.03% is the
+         * ~0.01 sample FIQ reload latency per 44-sample tick).  The old 1000 Hz behaviour was -0.2%. */
         for (int i = 0; i < 2; i++) {
-            double e1000 = waits[i] * 44.1, e1002 = waits[i] * 44.0, f = (double)fr[i];
-            double d1000 = f - e1000, d1002 = f - e1002;
-            double tol = e1000 * 0.001;                              /* 0.1% */
-            const char *verdict = (d1000 > -tol && d1000 < tol) ? "1000 Hz: authored ticks are exact ms (compensated)"
-                                : (d1002 > -tol && d1002 < tol) ? "~1002 Hz (44-sample ticks): NOT compensated, authored timing runs ~0.2% fast"
-                                                                : "UNEXPECTED (neither within 0.1%)";
-            printf("FLOWTIME_VERDICT authored_ticks=%lu measured_frames=%lld implied_hz=%.3f err_vs_1000Hz=%+.3f%% err_vs_44samples=%+.3f%% -> %s\n",
-                   (unsigned long)waits[i], (long long)fr[i], hz[i], 100.0 * d1000 / e1000, 100.0 * d1002 / e1002, verdict);
+            double expect = waits[i] * 44100.0, f = (double)fr[i], err = 100.0 * (f - expect) / expect;
+            int pass = err > -0.05 && err < 0.05;
+            const char *why = pass ? "authored time matches AICA time"
+                            : (err < -0.15 && err > -0.30) ? "STILL ~0.2% fast: tick rate not applied (1000 Hz assumption)"
+                                                           : "UNEXPECTED timing";
+            printf("FLOWTIME_VERDICT authored_seconds=%lu measured_frames=%lld expected_frames=%.0f err=%+.4f%% -> %s: %s\n",
+                   (unsigned long)waits[i], (long long)fr[i], expect, err, pass ? "PASS" : "FAIL", why);
+            if (!pass) all_ok = 0;
         }
     }
 done:

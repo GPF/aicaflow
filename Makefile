@@ -38,7 +38,8 @@ check: $(C_COMPILER) $(C_COMPILER_TEST) $(N64_CSEQ_TEST) $(N64_SFX_TEST) $(N64_C
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; \
 	python3 tools/research/make_fixture_midi.py "$$task_tmp/fixture.mid" && \
 	./$(C_COMPILER) "$$task_tmp/fixture.mid" --zones tools/test/fixtures/c_fixture.zones \
-	"$$task_tmp/fixture.afb" "$$task_tmp/fixture.afx" && driver/build/afx_validate "$$task_tmp/fixture.afx"
+	"$$task_tmp/fixture.afb" "$$task_tmp/fixture.afx" && driver/build/afx_validate "$$task_tmp/fixture.afx" && \
+	python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); r=struct.unpack_from("<2I",d,68); assert r==(11025,11), "new AFX headers must carry the AICA Timer-A tick rate 11025/11, got %r" % (r,)' "$$task_tmp/fixture.afx"
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; \
 	python3 tools/research/make_fixture_midi.py "$$task_tmp/fixture.mid" && \
 	./$(C_COMPILER) "$$task_tmp/fixture.mid" --zones tools/test/fixtures/c_fixture.zones \

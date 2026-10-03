@@ -15,7 +15,7 @@
 #include <string.h>
 #include <zlib.h>
 
-enum { TICK_RATE = 1000, VGM_RATE = 44100, MULTIPCM_ROM = 0x89, SLOTS = 28, CHIPS = 2 };
+enum { VGM_RATE = 44100, MULTIPCM_ROM = 0x89, SLOTS = 28, CHIPS = 2 };
 
 typedef struct { uint8_t *data; uint32_t bytes, frames; uint16_t loop; } sample_t;
 typedef struct { uint8_t kind, chip, slot; uint32_t tick, order, mask; uint16_t setup; uint16_t fields[AFX_FIELD_COUNT]; } raw_event_t;
@@ -54,7 +54,8 @@ static const double dr_ms[64] = {100000,100000,118200,101300,88600,70900,59100,5
 static uint32_t le32(const uint8_t *p) { return afx_read32(p); }
 static uint32_t be24(const uint8_t *p) { return (uint32_t)p[0] << 16 | (uint32_t)p[1] << 8 | p[2]; }
 static uint16_t be16(const uint8_t *p) { return (uint16_t)p[0] << 8 | p[1]; }
-static uint32_t tick(uint32_t samples) { return (uint32_t)(((uint64_t)samples * TICK_RATE + VGM_RATE / 2u) / VGM_RATE); }
+/* Samples at the VGM's 44.1 kHz -> AFX ticks (Timer-A base: 44 samples per tick). */
+static uint32_t tick(uint32_t samples) { return (uint32_t)(((uint64_t)samples * AFX_TICK_RATE_NUM + ((uint64_t)AFX_TICK_RATE_DEN * VGM_RATE) / 2u) / ((uint64_t)AFX_TICK_RATE_DEN * VGM_RATE)); }
 
 static int grow(void **data, uint32_t *capacity, uint32_t count, size_t element) {
     if (count < *capacity) return 0;
@@ -472,7 +473,7 @@ int main(int argc, char **argv) {
     }
     free(events); free(zones); events = optimized; zones = templates; optimized = NULL; templates = NULL; zone_count = template_count;
     if (adpcm && encode_adpcm_zones(zones, zone_count, &adpcm_data, &adpcm_count)) { fprintf(stderr, "afx_vgm: ADPCM encoding failed\n"); goto done; }
-    if (afx_c_compile_events(events, count, tick(parser.elapsed), TICK_RATE, zones, zone_count, &result)) { fprintf(stderr, "afx_vgm: AFX execution or asset limits exceeded\n"); goto done; }
+    if (afx_c_compile_events(events, count, tick(parser.elapsed), AFX_C_TICK_RATE, zones, zone_count, &result)) { fprintf(stderr, "afx_vgm: AFX execution or asset limits exceeded\n"); goto done; }
     bank = with_suffix(output, ".afb"); seek = with_suffix(output, ".afc"); visual = with_suffix(output, ".afv");
     if (!bank || !seek || !visual || write_file(output, result.afx, result.afx_bytes) || write_file(bank, result.afb, result.afb_bytes) ||
         write_file(seek, result.afc, result.afc_bytes) || write_file(visual, result.afv, result.afv_bytes)) goto done;

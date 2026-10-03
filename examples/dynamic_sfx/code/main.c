@@ -46,7 +46,8 @@ enum {
     SLIDE_GUARD_FRAMES = 4,
     SLIDE_RATE_HZ = 44100,
     SLIDE_FRAMES = sizeof(slide_pcm16) / 2u - SLIDE_GUARD_FRAMES,
-    SLIDE_DURATION_TICKS = (SLIDE_FRAMES * 1000u + SLIDE_RATE_HZ / 2u) / SLIDE_RATE_HZ,
+    SLIDE_DURATION_TICKS = (SLIDE_FRAMES * AFX_TICK_RATE_NUM + AFX_TICK_RATE_DEN * SLIDE_RATE_HZ / 2u) /
+                           (AFX_TICK_RATE_DEN * SLIDE_RATE_HZ),   /* AFX ticks, 44 samples each */
     SLIDE_PAUSE_TICKS = 300,
     SLIDE_STREAM_BYTES = 8 + SLIDE_PAN_STEPS * (3 + 8) + 2 + 1
 };
@@ -100,7 +101,7 @@ static int make_bank_flow(const afx_bank_t *bank, const uint16_t fields[AFX_FIEL
     afx_write32(file + 24, AFX_SETUP_BYTES); afx_write32(file + 28, stream_bytes);
     afx_write32(file + 36, 1); afx_write32(file + 40, bank->id.low); afx_write32(file + 44, bank->id.high);
     afx_write32(file + 48, 80); afx_write32(file + 52, 1);
-    afx_write32(file + 64, 1); afx_write32(file + 68, 1000); afx_write32(file + 72, 1);
+    afx_write32(file + 64, 1); afx_write32(file + 68, AFX_TICK_RATE_NUM); afx_write32(file + 72, AFX_TICK_RATE_DEN);
     afx_write32(file + 80, 0); afx_write32(file + 84, bank_offset); afx_write32(file + 88, sample_bytes);
     for (uint32_t field = 0; field < AFX_FIELD_COUNT; ++field)
         afx_write16(file + 96 + field * 2u, fields[field]);

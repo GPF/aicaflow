@@ -118,7 +118,7 @@ static int build_flow(const afx_bank_t *bank, uint16_t pitch, uint16_t mix, afx_
     afx_write32(file + 24, AFX_SETUP_BYTES); afx_write32(file + 28, written);
     afx_write32(file + 36, 1); afx_write32(file + 40, bank->id.low); afx_write32(file + 44, bank->id.high);
     afx_write32(file + 48, 80); afx_write32(file + 52, 1);
-    afx_write32(file + 64, 1); afx_write32(file + 68, 1000); afx_write32(file + 72, 1);
+    afx_write32(file + 64, 1); afx_write32(file + 68, AFX_TICK_RATE_NUM); afx_write32(file + 72, AFX_TICK_RATE_DEN);
     afx_write32(file + 80, 0); afx_write32(file + 84, 0); afx_write32(file + 88, WAVE_BYTES);
     for (unsigned f = 0; f < AFX_FIELD_COUNT; ++f)
         afx_write16(file + 96 + f * 2u, fields[f]);

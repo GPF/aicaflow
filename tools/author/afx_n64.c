@@ -204,6 +204,11 @@ failed:
     free(source); free(resampled); free(encoded); return -1;
 }
 
+/* Microseconds -> AFX ticks (Timer-A time base 11025/11 per second; see protocol.h). */
+static double usec_to_ticks_f(double us) {
+    return us * (double)AFX_TICK_RATE_NUM / ((double)AFX_TICK_RATE_DEN * 1000000.0);
+}
+
 static const double ar_time_ms[64] = {100000,100000,8100,6900,6000,4800,4000,3400,3000,2400,2000,1700,1500,1200,1000,860,760,600,500,430,380,300,250,220,190,150,130,110,95,76,63,55,47,38,31,27,24,19,15,13,12,9.4,7.9,6.8,6,4.7,3.8,3.4,3,2.4,2,1.8,1.6,1.3,1.1,.93,.85,.65,.53,.44,.4,.35,0,0};
 static const double dr_time_ms[64] = {100000,100000,118200,101300,88600,70900,59100,50700,44300,35500,29600,25300,22200,17700,14800,12700,11100,8900,7400,6300,5500,4400,3700,3200,2800,2200,1800,1600,1400,1100,920,790,690,550,460,390,340,270,230,200,170,140,110,98,85,68,57,49,43,34,28,25,22,18,14,12,11,8.5,7.1,6.1,5.4,4.3,3.6,3.1};
 
@@ -422,7 +427,7 @@ static int compile_n64(n64_note_t *notes, uint32_t note_count,
         }
     }
     if (afx_c_optimize_events(events, event_count, zones, zone_count, &optimized, &templates, &template_count) ||
-        afx_c_compile_events(optimized, event_count, final_tick, 1000, templates, template_count, out)) goto failed;
+        afx_c_compile_events(optimized, event_count, final_tick, AFX_C_TICK_RATE, templates, template_count, out)) goto failed;
     free(scheduled); free(channels); free(events); free(optimized); free(templates); return 0;
 failed:
     free(scheduled); free(channels); free(events); free(optimized); free(templates); return -1;
@@ -508,17 +513,17 @@ static int lower_sfx(const bank_t *bank, unsigned requested, afx_c_event_t **out
          * pitch/level override. Keep both representations identical. */
         zones[index].setup[AFX_FIELD_PITCH] = sfx_pitch(sample->sample_rate, cents);
         zones[index].setup[AFX_FIELD_TOTAL_LEVEL] = sfx_mix(sound.volume, env[12]);
-        start = (uint32_t)nearbyint((double)cursor_us / 1000.0);
+        start = (uint32_t)nearbyint(usec_to_ticks_f((double)cursor_us));
         events[used] = (afx_c_event_t){.tick = start, .order = index + 16u, .opcode = AFX_OP_NOTE,
             .channel = (uint8_t)index, .setup = (uint16_t)index, .mask = AFX_NOTE_PL_MASK};
         events[used].fields[AFX_FIELD_PITCH] = zones[index].setup[AFX_FIELD_PITCH];
         events[used++].fields[AFX_FIELD_TOTAL_LEVEL] = zones[index].setup[AFX_FIELD_TOTAL_LEVEL];
         ratio = pow(2.0, (cents + nearbyint(1200.0 * log2((double)sample->sample_rate / 44100.0))) / 1200.0);
-        sample_duration = (uint32_t)fmax(1.0, nearbyint((double)sample->frames / (44100.0 * ratio) * 1000.0));
+        sample_duration = (uint32_t)fmax(1.0, nearbyint((double)sample->frames / (44100.0 * ratio) * ((double)AFX_TICK_RATE_NUM / AFX_TICK_RATE_DEN)));
         sustain = sample->loop && decay_us < 0.0;
         if (decay_us >= 0.0) {
-            keyoff = start + (uint32_t)fmax(1.0, nearbyint((attack_us + decay_us / scale) / 1000.0));
-            release = (uint32_t)fmax(1.0, nearbyint(release_us / 1000.0));
+            keyoff = start + (uint32_t)fmax(1.0, nearbyint(usec_to_ticks_f(attack_us + decay_us / scale)));
+            release = (uint32_t)fmax(1.0, nearbyint(usec_to_ticks_f(release_us)));
             events[used++] = (afx_c_event_t){.tick = keyoff, .order = index,
                 .opcode = AFX_OP_KEYOFF, .channel = (uint8_t)index};
             if (keyoff + release > duration) duration = keyoff + release;
@@ -558,7 +563,7 @@ static int write_sfx(const char *control_path, const char *table_path, const cha
     if (!requested || *end || requested > UINT32_MAX || read_file(control_path, &control, &control_bytes) ||
         read_file(table_path, &table, &table_bytes) || bank_open(&bank, control, control_bytes, table, table_bytes, 0) ||
         lower_sfx(&bank, (unsigned)requested, &stream, &events, &duration, &setups, &zones, &park) ||
-        afx_c_compile_events(stream, events, duration, 1000, setups, zones, &output)) goto done;
+        afx_c_compile_events(stream, events, duration, AFX_C_TICK_RATE, setups, zones, &output)) goto done;
     afx_write32(output.afx + 12, park ? AFX_FLAG_CONTROLLED : 0);
     afb = with_suffix(output_path, ".afb");
     if (!afb || write_file(output_path, output.afx, output.afx_bytes) || write_file(afb, output.afb, output.afb_bytes)) goto done;
@@ -591,7 +596,7 @@ int main(int argc, char **argv) {
     char *afb = NULL, *afc = NULL, *afv = NULL;
     if (read_file(argv[1], &control, &control_bytes) || read_file(argv[2], &table, &table_bytes) ||
         read_file(argv[3], &sequence, &sequence_bytes) || bank_open(&bank, control, control_bytes, table, table_bytes, (uint32_t)bank_index) ||
-        afx_c_n64_cseq_notes(sequence, sequence_bytes, (int)index, 1000, &raw, &raw_count,
+        afx_c_n64_cseq_notes(sequence, sequence_bytes, (int)index, AFX_C_TICK_RATE, &raw, &raw_count,
                              &automation, &automation_count, &duration) ||
         lower(&bank, raw, raw_count, automation, automation_count, &notes, &note_count, &zones, &zone_count) ||
         compile_n64(notes, note_count, automation, automation_count, duration, zones, zone_count, &output)) {

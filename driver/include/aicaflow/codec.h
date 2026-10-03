@@ -16,6 +16,20 @@ static inline void afx_write32(uint8_t *p, uint32_t v) {
 static inline int afx_range(uint32_t offset, uint32_t bytes, uint32_t limit) {
     return offset <= limit && bytes <= limit - offset;
 }
+/* Time -> AFX ticks, using the Timer-A time base in protocol.h (11025/11 ticks per second).
+ * Rounds to nearest; 64-bit intermediates (usec up to ~10^15 is safe). */
+static inline uint64_t afx_usec_to_ticks(uint64_t usec) {
+    const uint64_t d = (uint64_t)AFX_TICK_RATE_DEN * 1000000u;
+    return (usec * AFX_TICK_RATE_NUM + d / 2u) / d;
+}
+static inline uint64_t afx_samples_to_ticks(uint64_t samples_44k1) {
+    const uint64_t d = (uint64_t)AFX_TICK_RATE_DEN * 44100u;
+    return (samples_44k1 * AFX_TICK_RATE_NUM + d / 2u) / d;
+}
+static inline uint64_t afx_ticks_to_usec(uint64_t ticks) {
+    const uint64_t d = AFX_TICK_RATE_NUM;
+    return (ticks * AFX_TICK_RATE_DEN * 1000000u + d / 2u) / d;
+}
 typedef struct {
     uint8_t opcode, channel;
     uint16_t setup;

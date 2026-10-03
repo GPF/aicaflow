@@ -1,6 +1,9 @@
 /* Test the private lowering boundary without adding a runtime/public API. */
 #define main afx_n64_cli_main
 #include "../author/afx_n64.c"
+
+/* Round-number tick rate for tests that assert tick counts; production uses AFX_C_TICK_RATE (11025/11). */
+#define RATE_1000 ((afx_c_tick_rate_t){1000, 1})
 #undef main
 #include <assert.h>
 
@@ -48,7 +51,7 @@ int main(void) {
         assert(zones[i].setup[AFX_FIELD_TOTAL_LEVEL] == events[i].fields[AFX_FIELD_TOTAL_LEVEL]);
     }
     afx_c_output_t output = {0};
-    assert(!afx_c_compile_events(events, event_count, duration, 1000, zones, zone_count, &output));
+    assert(!afx_c_compile_events(events, event_count, duration, RATE_1000, zones, zone_count, &output));
     assert(!afx_file_validate(output.afx, output.afx_bytes, NULL));
     assert(afx_read32(output.afx + 12) == AFX_FLAG_CONTROLLED && !output.afc && !output.afv);
     assert(afx_read16(output.afx + afx_read32(output.afx + 16) + 2 * AFX_FIELD_PITCH) == sfx_pitch(22050, 0));
@@ -59,7 +62,7 @@ int main(void) {
     control[160] = 0; event_count = zone_count = duration = 0; park = 0;
     assert(!lower_sfx(&bank, 1, &events, &event_count, &duration, &zones, &zone_count, &park));
     assert(park && event_count == 2 && duration == 0);
-    assert(!afx_c_compile_events(events, event_count, duration, 1000, zones, zone_count, &output));
+    assert(!afx_c_compile_events(events, event_count, duration, RATE_1000, zones, zone_count, &output));
     assert(output.afx[output.afx_bytes - 1] == AFX_OP_PARK);
     afx_c_output_free(&output);
     free((void *)zones[0].sample.data); free(zones); free(events);

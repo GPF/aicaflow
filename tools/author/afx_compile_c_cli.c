@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
     uint8_t *data = read_file(argv[1], &midi_bytes);
     if (!data) return fprintf(stderr, "cannot read %s\n", argv[1]), 2;
     afx_c_note_t *notes = NULL; uint32_t count = 0;
-    int parsed = afx_c_midi_notes(data, midi_bytes, 1000, &notes, &count);
+    int parsed = afx_c_midi_notes(data, midi_bytes, AFX_C_TICK_RATE, &notes, &count);
     free(data);
     afx_c_output_t out;
     uint8_t *pcm = NULL; uint32_t pcm_bytes = 0;
@@ -154,11 +154,11 @@ int main(int argc, char **argv) {
     if (!parsed && sf2_mode && (afx_c_parse_sample_format(argv[3], &sf2_options.sample_format) ||
                                 afx_c_sf2_resolve(argv[4], notes, count, &sf2_options, &sf2))) parsed = -1;
     int result = parsed || (argc == 5 && (!pcm || (pcm_bytes & 1))) ? -1 :
-                 sf2_mode ? afx_c_compile_zones(sf2.notes, sf2.note_count, 1000,
+                 sf2_mode ? afx_c_compile_zones(sf2.notes, sf2.note_count, AFX_C_TICK_RATE,
                                                  sf2.zones, sf2.zone_count, &out) :
-                 zones_mode ? afx_c_compile_zones(notes, count, 1000, zones, zone_count, &out) :
-                 argc == 5 ? afx_c_compile_sample(notes, count, 1000, &sample, &out) :
-                 afx_c_compile_sine(notes, count, 1000, &out);
+                 zones_mode ? afx_c_compile_zones(notes, count, AFX_C_TICK_RATE, zones, zone_count, &out) :
+                 argc == 5 ? afx_c_compile_sample(notes, count, AFX_C_TICK_RATE, &sample, &out) :
+                 afx_c_compile_sine(notes, count, AFX_C_TICK_RATE, &out);
     free(notes);
     free(pcm);
     free_zones(zones, owned, zone_count);

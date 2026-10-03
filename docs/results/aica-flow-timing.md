@@ -47,3 +47,37 @@ inherits this.
   (c) change the timer so a tick is exactly 44.1 samples (not possible with an integer reload);
   (d) just document "tick = 44 samples". Choosing is a contract decision for AICAflow.
 - Single hardware, one voice, flow at normal tempo.
+
+## Fix: the authoring time base is now the Timer-A rational 11025/11
+Option 1 was taken, using the exact hardware-derived rational (44 samples per tick, `44100/44 = 11025/11`)
+rather than the measured integer 1002:
+- `AFX_TICK_RATE_NUM/DEN = 11025/11` in `protocol.h`; helpers `afx_usec_to_ticks`, `afx_samples_to_ticks`,
+  `afx_ticks_to_usec` in `codec.h`.
+- C tools: `afx_compile` (CLI, MIDI, SF2), `afx_bank` (song manifest; an explicit integer rate still overrides),
+  `afx_n64` (also its us -> tick conversions), `afx_vgm`, `afx_demo_assets` all author at `AFX_C_TICK_RATE`.
+  The compiler/MIDI/cseq APIs now take an `afx_c_tick_rate_t {num, den}` instead of a bare integer.
+- Examples that hand-build headers or convert time (`dynamic_sfx`, the AICA diagnostics, `music_player`'s
+  ticks <-> ms) use the shared constants. Python research compilers keep the nominal 1000/1 but are labelled
+  and print a warning. Docs: `docs/authoring.md` "Time base".
+- Regression coverage: `test_tick_rate_contract()` (header carries 11025/11; 1 s MIDI note = 1002 ticks;
+  10 s = 10023; 11 s = 11025; explicit 1000/1 still honoured), a header assertion in the `make check` CLI
+  fixture, and one in `test_afx_vgm.py`.
+
+### Hardware re-test (real Dreamcast, same test, authored in seconds)
+| authored | ticks | measured frames | expected (true time) | error | verdict |
+|---|---|---|---|---|---|
+| 10 s | 10 023 | 441 174 (+-66) | 441 000 | +0.040% | PASS |
+| 20 s | 20 045 | 882 260 (+-66) | 882 000 | +0.030% | PASS |
+
+Before the fix the same test gave -0.2%. The remaining +0.03% to +0.04% is real: a tick is 44.014-44.016
+samples, not 44, because the FIQ reloads timer A a little after the overflow (about 0.4 us per tick, my
+inference). If tighter agreement is ever needed, the header rate could be refined to the measured value
+without changing any code. Pass threshold in the test: within 0.05% of true audio time.
+
+### Caveats
+- `make check` still cannot run end to end (the unrelated `afx_bank --merge` / `--per-song` AFC mismatch, which
+  also stops `examples/music_player` asset preparation at HEAD); the individual tests were run instead:
+  `test_afx_compile`, `test_afx_n64_cseq`, `test_afx_n64_sfx`, `test_afx_vgm.py`, `driver` tests.
+- `music_player` could not be built end to end for that reason; its two new tick/ms helpers were checked
+  natively. Assets built before this change keep their 1000/1 header and old timing until rebuilt.
+- The compiler's checkpoint interval (`afx_compile_c.c`, every 1000 ticks) is an interval in ticks and was left.

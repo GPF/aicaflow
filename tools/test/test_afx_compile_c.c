@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Round-number tick rate for tests that assert tick counts; production uses AFX_C_TICK_RATE (11025/11). */
+#define RATE_1000 ((afx_c_tick_rate_t){1000, 1})
+
 static void assert_stream_budget(const afx_c_output_t *out) {
     afx_file_header_t header;
     assert(afx_file_validate(out->afx, out->afx_bytes, &header) == AFX_OK);
@@ -29,11 +32,53 @@ static void assert_stream_budget(const afx_c_output_t *out) {
     assert(writes <= AFX_EXECUTION_BUDGET_WRITES);
 }
 
+/* Regression: the AFX time base is the AICA Timer-A rational 11025/11 ticks per second (44 samples per
+ * tick, ~1002.27 Hz), NOT 1000 Hz. Hardware: docs/results/aica-flow-timing.md. Do not "simplify" this
+ * back to a x1000 millisecond conversion. */
+static void test_tick_rate_contract(void) {
+    assert(AFX_TICK_RATE_NUM == 11025u && AFX_TICK_RATE_DEN == 11u);
+    assert((uint64_t)AFX_TICK_RATE_NUM * 44u == 44100u * (uint64_t)AFX_TICK_RATE_DEN);   /* 44 samples per tick */
+    assert(AFX_TIMER_RELOAD == 212 && 256u - AFX_TIMER_RELOAD == 44u);                    /* the hardware reason */
+    /* time -> ticks goes through the rational */
+    assert(afx_usec_to_ticks(1000000u) == 1002u);            /* 1 s = 1002.27 ticks */
+    assert(afx_usec_to_ticks(10000000u) == 10023u);          /* 10 s = 10022.7 ticks */
+    assert(afx_usec_to_ticks(11000000u) == 11025u);          /* 11 s is exactly 11025 ticks */
+    assert(afx_samples_to_ticks(44u) == 1u && afx_samples_to_ticks(44100u) == 1002u &&
+           afx_samples_to_ticks(441000u) == 10023u);
+    assert(afx_ticks_to_usec(11025u) == 11000000u);
+    /* a 1.000 s MIDI note (division 480, default 120 bpm => 960 MIDI ticks per second) */
+    const unsigned char midi[] = {
+        'M','T','h','d', 0,0,0,6, 0,0, 0,1, 1,224,
+        'M','T','r','k', 0,0,0,13,
+        0,0x90,60,100, 0x87,0x40,0x80,60,0, 0,0xff,0x2f,0
+    };
+    afx_c_note_t *parsed = NULL;
+    unsigned count = 0;
+    assert(!afx_c_midi_notes(midi, sizeof(midi), AFX_C_TICK_RATE, &parsed, &count));
+    assert(count == 1 && parsed[0].start_tick == 0 && parsed[0].end_tick == 1002u);
+    afx_c_output_t out;
+    assert(!afx_c_compile_sine(parsed, count, AFX_C_TICK_RATE, &out));
+    afx_file_header_t header;
+    assert(afx_file_validate(out.afx, out.afx_bytes, &header) == AFX_OK);
+    assert(header.tick_rate_num == 11025u && header.tick_rate_den == 11u);   /* new headers carry the rational */
+    afx_c_output_free(&out);
+    free(parsed); parsed = NULL;
+    /* an explicit rate is honoured and written verbatim, so tests/legacy callers stay exact */
+    assert(!afx_c_midi_notes(midi, sizeof(midi), RATE_1000, &parsed, &count));
+    assert(count == 1 && parsed[0].end_tick == 1000u);
+    assert(!afx_c_compile_sine(parsed, count, RATE_1000, &out));
+    assert(afx_file_validate(out.afx, out.afx_bytes, &header) == AFX_OK);
+    assert(header.tick_rate_num == 1000u && header.tick_rate_den == 1u);
+    afx_c_output_free(&out);
+    free(parsed);
+}
+
 int main(void) {
+    test_tick_rate_contract();
     const afx_c_note_t notes[] = {{.start_tick = 0, .end_tick = 500, .key = 69, .velocity = 120},
                                   {.start_tick = 250, .end_tick = 750, .key = 76, .velocity = 100}};
     afx_c_output_t out;
-    assert(!afx_c_compile_sine(notes, 2, 1000, &out));
+    assert(!afx_c_compile_sine(notes, 2, RATE_1000, &out));
     assert(afx_file_validate(out.afx, out.afx_bytes, NULL) == AFX_OK);
     assert(afx_read16(out.afx + afx_read32(out.afx + 16) + 18) == 0x0f10);
     assert(out.afc_bytes > 64 && afx_read32(out.afc) == AFX_SEEK_MAGIC);
@@ -49,7 +94,7 @@ int main(void) {
        still light a different band instead of collapsing a chord to one bar. */
     assert(out.afv[12] > 0 && out.afv[12 + 15 * 32] > 0 && out.afv[12 + 15 * 32 + 31] > 0);
     afx_c_output_t repeat;
-    assert(!afx_c_compile_sine(notes, 2, 1000, &repeat));
+    assert(!afx_c_compile_sine(notes, 2, RATE_1000, &repeat));
     assert(out.afb_bytes == repeat.afb_bytes && !memcmp(out.afb, repeat.afb, out.afb_bytes));
     assert(out.afx_bytes == repeat.afx_bytes && !memcmp(out.afx, repeat.afx, out.afx_bytes));
     assert(out.afc_bytes == repeat.afc_bytes && !memcmp(out.afc, repeat.afc, out.afc_bytes));
@@ -58,7 +103,7 @@ int main(void) {
     afx_c_output_free(&out);
     const uint8_t pcm[] = {0, 0, 0xff, 0x7f, 0, 0, 0, 0x80};
     const afx_c_sample_t one_shot = {pcm, sizeof(pcm), 4, AFX_PCM16, 60, 0, 0, 3, 0, 44100};
-    assert(!afx_c_compile_sample(notes, 2, 1000, &one_shot, &out));
+    assert(!afx_c_compile_sample(notes, 2, RATE_1000, &one_shot, &out));
     assert(afx_file_validate(out.afx, out.afx_bytes, NULL) == AFX_OK);
     assert(out.afb_bytes == 32 + sizeof(pcm) && !memcmp(out.afb + 32, pcm, sizeof(pcm)));
     afx_c_output_free(&out);
@@ -66,7 +111,7 @@ int main(void) {
        this, 22.05 kHz assets play an octave too high on AICA's 44.1 kHz base. */
     const afx_c_note_t root_note[] = {{.start_tick = 0, .end_tick = 100, .key = 60, .velocity = 100}};
     const afx_c_sample_t half_rate = {pcm, sizeof(pcm), 4, AFX_PCM16, 60, 0, 0, 3, 0, 22050};
-    assert(!afx_c_compile_sample(root_note, 1, 1000, &half_rate, &out));
+    assert(!afx_c_compile_sample(root_note, 1, RATE_1000, &half_rate, &out));
     uint32_t half_image = afx_read32(out.afx + 16), half_stream = afx_read32(out.afx + 24);
     assert(out.afx[half_image + half_stream] == AFX_OP_NOTE_PL &&
            ((afx_read16(out.afx + half_image + half_stream + 4) >> 11) & 15u) == 15u);
@@ -117,7 +162,7 @@ int main(void) {
         {.sample = {pcm, sizeof(pcm), 4, AFX_PCM16, 72, 1, 0, 3, 0, 44100},
          .key_min = 66, .key_max = 127, .velocity_max = 127},
     };
-    assert(!afx_c_compile_zones(split_notes, 2, 1000, zones, 2, &out));
+    assert(!afx_c_compile_zones(split_notes, 2, RATE_1000, zones, 2, &out));
     assert(afx_file_validate(out.afx, out.afx_bytes, NULL) == AFX_OK);
     assert(afx_read32(out.afx + 36) == 2 && afx_read32(out.afx + 52) == 2);
     assert(afx_read32(out.afx + 80 + 4) == 0 && afx_read32(out.afx + 92 + 4) == 0);
@@ -128,7 +173,7 @@ int main(void) {
     afx_c_note_t dense[10];
     for (unsigned i = 0; i < 10; ++i)
         dense[i] = (afx_c_note_t){.start_tick = 0, .end_tick = 100, .key = (uint8_t)(60 + i), .velocity = 100};
-    assert(!afx_c_compile_sample(dense, 10, 1000, &one_shot, &out));
+    assert(!afx_c_compile_sample(dense, 10, RATE_1000, &one_shot, &out));
     assert_stream_budget(&out);
     afx_c_output_free(&out);
     /* Trace importers use the same bank writer, but retain live register
@@ -143,7 +188,7 @@ int main(void) {
          .mask = 1u << AFX_FIELD_MIX, .fields = {[AFX_FIELD_MIX] = 0x5024}},
         {.tick = 20, .order = 0, .opcode = AFX_OP_KEYOFF, .channel = 0},
     };
-    assert(!afx_c_compile_events(trace_events, 3, 30, 1000, trace_zone, 1, &out));
+    assert(!afx_c_compile_events(trace_events, 3, 30, RATE_1000, trace_zone, 1, &out));
     assert(afx_file_validate(out.afx, out.afx_bytes, NULL) == AFX_OK);
     uint32_t trace_image = afx_read32(out.afx + 16);
     assert(out.afx[trace_image + AFX_SETUP_BYTES] == AFX_OP_NOTE_PL &&
@@ -156,7 +201,7 @@ int main(void) {
         {.start_tick = 0, .end_tick = 1100, .release_tick = 100, .key = 60, .velocity = 100},
         {.start_tick = 500, .end_tick = 600, .release_tick = 600, .key = 72, .velocity = 100},
     };
-    assert(!afx_c_compile_sample(tailed, 2, 1000, &one_shot, &out));
+    assert(!afx_c_compile_sample(tailed, 2, RATE_1000, &one_shot, &out));
     assert(afx_read32(out.afx + 64) == 2);
     afx_file_header_t tailed_header;
     assert(afx_file_validate(out.afx, out.afx_bytes, &tailed_header) == AFX_OK);
@@ -187,7 +232,7 @@ int main(void) {
         .setup_mask = (1u << AFX_FIELD_ENV_AD) | (1u << AFX_FIELD_DIRECT),
         .setup = {[AFX_FIELD_ENV_AD] = 0x1234, [AFX_FIELD_DIRECT] = 0x0f10}
     }};
-    assert(!afx_c_compile_zones(controlled_note, 1, 1000, controlled_zone, 1, &out));
+    assert(!afx_c_compile_zones(controlled_note, 1, RATE_1000, controlled_zone, 1, &out));
     uint32_t image = afx_read32(out.afx + 16);
     assert(afx_read16(out.afx + image + 8) == 0x1234 && afx_read16(out.afx + image + 16) == 0x70);
     assert(afx_read16(out.afx + image + 36 + 6) == 0x4324);
@@ -204,7 +249,7 @@ int main(void) {
         {.sample = one_shot, .key_max = 127, .velocity_max = 127,
          .setup_mask = 1u << AFX_FIELD_DIRECT, .setup = {[AFX_FIELD_DIRECT] = 0x0f11}},
     };
-    assert(!afx_c_compile_zones(templated_notes, 2, 1000, templated_zones, 2, &out));
+    assert(!afx_c_compile_zones(templated_notes, 2, RATE_1000, templated_zones, 2, &out));
     assert(afx_read32(out.afx + 36) == 1);
     afx_file_header_t templated_header;
     assert(afx_file_validate(out.afx, out.afx_bytes, &templated_header) == AFX_OK);
@@ -226,9 +271,9 @@ int main(void) {
     };
     afx_c_note_t *parsed = NULL;
     unsigned count = 0;
-    assert(!afx_c_midi_notes(midi, sizeof(midi), 1000, &parsed, &count));
+    assert(!afx_c_midi_notes(midi, sizeof(midi), RATE_1000, &parsed, &count));
     assert(count == 1 && parsed[0].start_tick == 0 && parsed[0].end_tick == 600);
-    assert(!afx_c_compile_sine(parsed, count, 1000, &out));
+    assert(!afx_c_compile_sine(parsed, count, RATE_1000, &out));
     assert(afx_file_validate(out.afx, out.afx_bytes, NULL) == AFX_OK);
     free(parsed); afx_c_output_free(&out);
     /* Repeated NOTE-on for one MIDI key is a FIFO stack, not an implicit
@@ -238,7 +283,7 @@ int main(void) {
         'M','T','r','k', 0,0,0,20,
         0,0x90,60,100, 0,0x90,60,90, 0x60,0x80,60,0, 0x60,0x80,60,0, 0,0xff,0x2f,0
     };
-    assert(!afx_c_midi_notes(repeated_key_midi, sizeof(repeated_key_midi), 1000, &parsed, &count));
+    assert(!afx_c_midi_notes(repeated_key_midi, sizeof(repeated_key_midi), RATE_1000, &parsed, &count));
     assert(count == 2 && parsed[0].end_tick == 100 && parsed[1].end_tick == 200);
     free(parsed);
     /* Volume, expression and bend are source state at NOTE-on. The C SF2
@@ -249,7 +294,7 @@ int main(void) {
         0,0xb0,7,64, 0,0xb0,11,63, 0,0xb0,91,100, 0,0xe0,0,65, 0,0x90,69,100,
         0x60,0x80,69,0, 0,0xff,0x2f,0
     };
-    assert(!afx_c_midi_notes(controller_midi, sizeof(controller_midi), 1000, &parsed, &count));
+    assert(!afx_c_midi_notes(controller_midi, sizeof(controller_midi), RATE_1000, &parsed, &count));
     assert(count == 1 && parsed[0].controller_state >> 39 &&
            ((parsed[0].controller_state >> 4) & 127u) == 64 &&
            ((parsed[0].controller_state >> 11) & 127u) == 63 &&
@@ -266,7 +311,7 @@ int main(void) {
         'M','T','r','k', 0,0,0,7,
         0,0xc0,42, 0,0xff,0x2f,0
     };
-    assert(!afx_c_midi_notes(split_midi, sizeof(split_midi), 1000, &parsed, &count));
+    assert(!afx_c_midi_notes(split_midi, sizeof(split_midi), RATE_1000, &parsed, &count));
     assert(count == 1 && parsed[0].program == 42 && parsed[0].end_tick == 100);
     free(parsed);
     /* Sustain pedal is baked into the offline note lifetime.  The ARM7 sees
@@ -278,7 +323,7 @@ int main(void) {
         0,0x90,60,100, 10,0xb0,64,127, 10,0x80,60,0,
         0x50,0xb0,64,0, 0,0xff,0x2f,0
     };
-    assert(!afx_c_midi_notes(sustain_midi, sizeof(sustain_midi), 1000, &parsed, &count));
+    assert(!afx_c_midi_notes(sustain_midi, sizeof(sustain_midi), RATE_1000, &parsed, &count));
     assert(count == 1 && parsed[0].start_tick == 0 && parsed[0].end_tick == 104);
     free(parsed);
     return 0;

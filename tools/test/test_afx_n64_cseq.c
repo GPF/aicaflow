@@ -1,5 +1,8 @@
 #include "afx_n64_cseq.h"
 
+/* Round-number tick rate for tests that assert tick counts; production uses AFX_C_TICK_RATE (11025/11). */
+#define RATE_1000 ((afx_c_tick_rate_t){1000, 1})
+
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +19,7 @@ int main(void) {
     memcpy(cseq + 68, track, sizeof(track));
     afx_c_note_t *notes = NULL; afx_n64_automation_t *automation = NULL;
     uint32_t count = 0, automation_count = 0, duration = 0;
-    assert(!afx_c_n64_cseq_notes(cseq, 68 + sizeof(track), -1, 1000, &notes, &count,
+    assert(!afx_c_n64_cseq_notes(cseq, 68 + sizeof(track), -1, RATE_1000, &notes, &count,
                                  &automation, &automation_count, &duration));
     assert(count == 1 && duration == 500);
     assert(notes[0].start_tick == 0 && notes[0].end_tick == 500 && notes[0].key == 60 &&

@@ -93,6 +93,27 @@ to retain rounding room around its inclusive loop end.
 build/afx_compile song.mid --zones instrument.zones song.afb song.afx
 ```
 
+## Time base: what an AFX tick is
+
+An AFX tick is one overflow of the ARM7's timer A, which counts AICA samples and is loaded with
+`AFX_TIMER_RELOAD = 212`: 256 - 212 = **44 samples per tick**, so the time base is
+`44100 / 44` = **11025/11 ticks per second (about 1002.27 Hz)**, *not* 1000 Hz. It is exposed as
+`AFX_TICK_RATE_NUM` / `AFX_TICK_RATE_DEN` in `driver/include/aicaflow/protocol.h`, and every new AFX header
+carries it in `tick_rate_num` / `tick_rate_den`. Convert time with the shared helpers in
+`codec.h` (`afx_usec_to_ticks`, `afx_samples_to_ticks`, `afx_ticks_to_usec`), never with a x1000
+shortcut. Examples: 1 s is 1002 ticks, 10 s is 10023 ticks, 11 s is exactly 11025 ticks.
+
+Measured on a real console (`docs/results/aica-flow-timing.md`): the real tick is 44.01 samples (the extra
+~0.01 sample is FIQ reload latency), so authored time is within about 0.03% of true time. Before this
+contract, assets were authored at 1000/1 and played about 0.2% fast (10 000 authored ticks lasted 9.979 s;
+a 3-minute piece ended 0.4 s early). Assets built before the change keep their `1000/1` header and the old
+behaviour until rebuilt.
+
+`tick_rate_num/den` in the header is the source of truth. The tuner and `afx_flow_duration()` already convert
+ticks to time with it. A manifest `song` line may still give an explicit integer ticks-per-second (`value/1`)
+to override the default for that song. The Python research compilers under `tools/research/` still write
+the nominal `1000/1` and print a warning; use the C tools for production assets.
+
 ## SoundFonts and bank maps
 
 For SoundFont input, the reader uses each

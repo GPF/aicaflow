@@ -116,7 +116,17 @@ def build_bank_payload(samples: list[dict]) -> tuple[bytes, list[int], int, int]
 def build_bank_flow(setups: bytes, setup_samples: list[int], samples: list[dict], sample_offsets: list[int],
                     bank_low: int, bank_high: int, lanes: bytes, stream: bytes,
                     flags: int, channels: int, tick_rate: int) -> bytes:
-    """Emit the public bank-bound AFX directly from prepared AICA register state."""
+    """Emit the public bank-bound AFX directly from prepared AICA register state.
+
+    NOTE: this research compiler still takes an integer ticks-per-second. The AICA hardware time base is
+    11025/11 ticks per second (44 samples per tick, ~1002.27 Hz; see AFX_TICK_RATE_NUM/DEN in
+    driver/include/aicaflow/protocol.h and docs/results/aica-flow-timing.md). Output authored here at the
+    nominal 1000/1 runs ~0.23% fast on hardware; the C tools (afx_compile, afx_bank, afx_n64, afx_vgm) are
+    the production producers and use the real rate."""
+    if tick_rate == 1000:
+        import sys
+        print("warning: afx_compile.py (research) is writing the nominal 1000/1 tick rate; the AICA time base is "
+              "11025/11, so this asset will play ~0.23% fast. Use the C tools for production assets.", file=sys.stderr)
     if len(setups) != len(setup_samples) * SETUP_BYTES:
         raise CompileError("internal setup relocation mismatch")
     relocations = bytearray(len(setup_samples) * 12)

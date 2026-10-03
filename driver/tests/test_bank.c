@@ -32,7 +32,7 @@ static void flow_file(uint8_t data[160], uint32_t low, uint32_t high) {
     afx_write32(data + 32, 1); afx_write32(data + 36, 1);
     afx_write32(data + 40, low); afx_write32(data + 44, high);
     afx_write32(data + 48, 80); afx_write32(data + 52, 1);
-    afx_write32(data + 64, 1); afx_write32(data + 68, 1000); afx_write32(data + 72, 1);
+    afx_write32(data + 64, 1); afx_write32(data + 68, AFX_TICK_RATE_NUM); afx_write32(data + 72, AFX_TICK_RATE_DEN);
     afx_write32(data + 80, 0); afx_write32(data + 84, 0); afx_write32(data + 88, 64);
     afx_write16(data + 96 + 6, 31); /* A valid 32-frame PCM16 loop range. */
     data[96 + AFX_SETUP_BYTES] = AFX_OP_NOTE_PL;

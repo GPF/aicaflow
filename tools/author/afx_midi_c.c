@@ -66,7 +66,7 @@ static int compare_event(const void *left, const void *right) {
 }
 
 static uint32_t control_tick(uint32_t source_tick, const tempo_t *tempos,
-                             uint32_t tempo_count, uint32_t division, uint32_t rate) {
+                             uint32_t tempo_count, uint32_t division, afx_c_tick_rate_t rate) {
     uint64_t usec_times_division = 0, cursor = 0;
     uint32_t usec_per_beat = 500000;
     for (uint32_t i = 0; i < tempo_count && tempos[i].tick <= source_tick; ++i) {
@@ -74,8 +74,8 @@ static uint32_t control_tick(uint32_t source_tick, const tempo_t *tempos,
         cursor = tempos[i].tick; usec_per_beat = tempos[i].usec;
     }
     usec_times_division += (uint64_t)(source_tick - cursor) * usec_per_beat;
-    uint64_t numerator = usec_times_division * rate;
-    uint64_t denominator = (uint64_t)division * 1000000u;
+    uint64_t numerator = usec_times_division * rate.num;
+    uint64_t denominator = (uint64_t)division * 1000000u * rate.den;
     return (uint32_t)((2u * numerator + denominator) / (2u * denominator));
 }
 
@@ -102,14 +102,14 @@ static void close_sustained(raw_note_t *raw, int32_t sustained[16],
     sustained[channel] = -1;
 }
 
-int afx_c_midi_notes(const void *input, uint32_t bytes, uint32_t tick_rate,
+int afx_c_midi_notes(const void *input, uint32_t bytes, afx_c_tick_rate_t tick_rate,
                      afx_c_note_t **out_notes, uint32_t *out_count) {
     const uint8_t *data = input;
     raw_note_t *raw = NULL; tempo_t *tempos = NULL; midi_event_t *events = NULL;
     uint32_t raw_count = 0, raw_capacity = 0, tempo_count = 0, tempo_capacity = 0;
     uint32_t event_count = 0, event_capacity = 0;
     uint32_t at = 0, format, tracks, division, event_order = 0, final_tick = 0;
-    if (!out_notes || !out_count || !data || !tick_rate || bytes < 14 ||
+    if (!out_notes || !out_count || !data || !tick_rate.num || !tick_rate.den || bytes < 14 ||
         memcmp(data, "MThd", 4) || be32(data + 4) != 6) return -1;
     format = be16(data + 8); tracks = be16(data + 10); division = be16(data + 12); at = 14;
     if (format > 1 || !tracks || !division || (division & 0x8000u)) return -1;

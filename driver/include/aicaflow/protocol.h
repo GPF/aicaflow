@@ -53,6 +53,13 @@
 #define AFX_STACK_BASE (AFX_SVC_STACK_TOP - AFX_MAIN_STACK_BYTES)
 #define AFX_STACK_PATTERN 0xa5a5a5a5
 #define AFX_TIMER_RELOAD 212
+/* Time base: ARM7 timer A counts AICA samples and overflows after 256 - AFX_TIMER_RELOAD = 44
+ * samples, so one AFX tick is 44 samples = 44/44100 s, i.e. 44100/44 = 11025/11 ticks per second
+ * (about 1002.27 Hz), NOT 1000 Hz. Hardware: 10000 ticks measured 440088 frames (44.009 samples per
+ * tick; the extra ~0.01 sample is FIQ reload latency). Authoring tools write this rational into
+ * tick_rate_num/tick_rate_den of every new AFX header and convert all time -> ticks through it. */
+#define AFX_TICK_RATE_NUM 11025u
+#define AFX_TICK_RATE_DEN 11u
 
 #ifndef __ASSEMBLER__
 #include <stddef.h>

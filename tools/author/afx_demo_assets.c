@@ -27,7 +27,7 @@ static int write_output(const char *afb, const char *afx, afx_c_output_t *out) {
 
 static int sine_pair(const afx_c_note_t *notes, uint32_t count, const char *afb, const char *afx) {
     afx_c_output_t out;
-    return afx_c_compile_sine(notes, count, 1000, &out) || write_output(afb, afx, &out);
+    return afx_c_compile_sine(notes, count, AFX_C_TICK_RATE, &out) || write_output(afb, afx, &out);
 }
 
 static int read_file(const char *path, uint8_t **out, uint32_t *out_bytes) {
@@ -48,7 +48,7 @@ static int wilhelm_pair(const char *pcm_path, const char *afb, const char *afx) 
     const afx_c_sample_t sample = {pcm, bytes, bytes / 2u, AFX_PCM16, 69, 0,
                                    0, (uint16_t)(bytes / 2u - 1u), 1200, 44100};
     afx_c_output_t out;
-    int result = afx_c_compile_sample(&note, 1, 1000, &sample, &out);
+    int result = afx_c_compile_sample(&note, 1, AFX_C_TICK_RATE, &sample, &out);
     free(pcm);
     return result || write_output(afb, afx, &out);
 }

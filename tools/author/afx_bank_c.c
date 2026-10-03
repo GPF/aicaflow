@@ -23,7 +23,8 @@ typedef struct {
 typedef struct { bool enabled; uint32_t seed; uint8_t level_centibels, shorten_ms, lfo_rate_steps; } humanize_t;
 typedef struct {
     char name[128], midi[1024];
-    uint32_t tick_rate, release_tail_ms;
+    uint32_t tick_rate, release_tail_ms;   /* tick_rate: optional explicit ticks/s from the manifest; 0 = AICA Timer-A default */
+    afx_c_tick_rate_t rate;                /* resolved */
     humanize_t humanize;
     afx_c_sf2_output_t resolved;
 } song_t;
@@ -74,7 +75,7 @@ static uint32_t little32(const uint8_t *data) {
     return (uint32_t)data[0] | (uint32_t)data[1] << 8 | (uint32_t)data[2] << 16 | (uint32_t)data[3] << 24;
 }
 
-static int humanize_notes(afx_c_note_t *notes, uint32_t count, uint32_t tick_rate, const humanize_t *settings) {
+static int humanize_notes(afx_c_note_t *notes, uint32_t count, afx_c_tick_rate_t tick_rate, const humanize_t *settings) {
     if (!settings->enabled) return 0;
     for (uint32_t i = 0; i < count; ++i) {
         char identity[64]; uint8_t digest[32]; uint32_t duration, maximum;
@@ -85,7 +86,7 @@ static int humanize_notes(afx_c_note_t *notes, uint32_t count, uint32_t tick_rat
         notes[i].attenuation_offset_centibels = (int16_t)(little32(digest) % (2u * settings->level_centibels + 1u)) -
                                                  settings->level_centibels;
         duration = notes[i].end_tick - notes[i].start_tick;
-        maximum = (settings->shorten_ms * tick_rate + 500u) / 1000u;
+        maximum = (uint32_t)(((uint64_t)settings->shorten_ms * tick_rate.num + 500u * tick_rate.den) / (1000u * (uint64_t)tick_rate.den));
         if (maximum > duration / 20u) maximum = duration / 20u;
         notes[i].end_tick -= little32(digest + 4) % (maximum + 1u);
         notes[i].release_tick = notes[i].end_tick;
@@ -424,14 +425,15 @@ static int parse_map(const char *path, source_t **out_sources, uint32_t *out_sou
             if (!grown) goto failed;
             maps = grown; maps[map_count++] = item;
         } else if (!strcmp(kind, "song")) {
-            song_t item = {.tick_rate = 1000}; char resolved[1200];
+            song_t item = {.tick_rate = 0}; char resolved[1200];
             int fields = sscanf(cursor, "song %127s \"%1023[^\"]\" %u %u", item.name, item.midi,
                                 &item.tick_rate, &item.release_tail_ms);
             if (fields < 2) fields = sscanf(cursor, "%15s %127s %1023s %u %u", kind, item.name,
                                              item.midi, &item.tick_rate, &item.release_tail_ms) - 1;
-            if ((fields != 2 && fields != 3 && fields != 4) || !item.tick_rate || item.tick_rate > 1000000 ||
+            if ((fields != 2 && fields != 3 && fields != 4) || item.tick_rate > 1000000 ||
                 item.release_tail_ms > 10000 ||
                 relative_path(path, item.midi, resolved)) goto failed;
+            item.rate = item.tick_rate ? (afx_c_tick_rate_t){item.tick_rate, 1u} : AFX_C_TICK_RATE;
             strcpy(item.midi, resolved);
             for (uint32_t i = 0; i < song_count; ++i) if (!strcmp(songs[i].name, item.name)) goto failed;
             song_t *grown = realloc(songs, (size_t)(song_count + 1u) * sizeof(*songs));
@@ -461,10 +463,10 @@ static int resolve_song(song_t *song, map_t *maps, uint32_t map_count) {
     uint8_t *midi = NULL; uint32_t midi_bytes = 0;
     afx_c_note_t *notes = NULL; uint32_t note_count = 0;
     if (read_file(song->midi, &midi, &midi_bytes) ||
-        afx_c_midi_notes(midi, midi_bytes, song->tick_rate, &notes, &note_count)) goto failed;
-    if (humanize_notes(notes, note_count, song->tick_rate, &song->humanize)) goto failed;
+        afx_c_midi_notes(midi, midi_bytes, song->rate, &notes, &note_count)) goto failed;
+    if (humanize_notes(notes, note_count, song->rate, &song->humanize)) goto failed;
     if (song->release_tail_ms) {
-        uint64_t tail = ((uint64_t)song->release_tail_ms * song->tick_rate + 999u) / 1000u;
+        uint64_t tail = ((uint64_t)song->release_tail_ms * song->rate.num + 1000u * (uint64_t)song->rate.den - 1u) / (1000u * (uint64_t)song->rate.den);
         if (!tail || tail > UINT32_MAX) goto failed;
         for (uint32_t i = 0; i < note_count; ++i) {
             if (notes[i].end_tick > UINT32_MAX - tail) goto failed;
@@ -508,7 +510,7 @@ typedef struct { unsigned bank, program; } program_t;
 static int collect_programs(const char *path, program_t **programs, uint32_t *count) {
     uint8_t *midi = NULL; uint32_t midi_bytes = 0;
     afx_c_note_t *notes = NULL; uint32_t note_count = 0;
-    if (read_file(path, &midi, &midi_bytes) || afx_c_midi_notes(midi, midi_bytes, 1000, &notes, &note_count)) goto failed;
+    if (read_file(path, &midi, &midi_bytes) || afx_c_midi_notes(midi, midi_bytes, AFX_C_TICK_RATE, &notes, &note_count)) goto failed;
     for (uint32_t i = 0; i < note_count; ++i) {
         program_t item = {(unsigned)notes[i].bank_msb * 128u + notes[i].bank_lsb, notes[i].program};
         uint32_t at = 0;
@@ -538,7 +540,7 @@ static int create_map(int argc, char **argv) {
         "# AICAflow bank map. Edit source/map lines to combine SoundFonts or tune formats.\n"
         "# source <name> <soundfont.sf2> [stereo|left|right]\n"
         "# map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <pcm16|pcm8|adpcm|auto> [key=value ...]\n"
-        "# song <output-basename> <source.mid> [control-tick-rate] [release-tail-ms]\n\n"
+        "# song <output-basename> <source.mid> [ticks-per-second override; default is the AICA time base 11025/11] [release-tail-ms]\n\n"
         "source default \"%s\"\n\n", sf2_path) < 0;
     for (uint32_t i = 0; !failed && i < program_count; ++i)
         failed = fprintf(file, "map * %u %u default %u %u auto\n", programs[i].bank, programs[i].program,
@@ -562,7 +564,7 @@ static int build_per_song(const char *map_path, const char *directory) {
         if (resolve_song(songs + song, maps, map_count)) {
             fprintf(stderr, "%s: cannot resolve MIDI programs through its AFBM map\n", songs[song].name); goto failed;
         }
-        if (afx_c_compile_zones(songs[song].resolved.notes, songs[song].resolved.note_count, songs[song].tick_rate,
+        if (afx_c_compile_zones(songs[song].resolved.notes, songs[song].resolved.note_count, songs[song].rate,
                                 songs[song].resolved.zones, songs[song].resolved.zone_count, &out)) {
             fprintf(stderr, "%s: cannot compile resolved sample zones\n", songs[song].name); goto failed;
         }
@@ -844,7 +846,7 @@ int main(int argc, char **argv) {
     uint32_t bank_low = 0, bank_high = 0;
     for (uint32_t song = 0; song < song_count; ++song) {
         afx_c_output_t out;
-        if (afx_c_compile_zones(songs[song].resolved.notes, songs[song].resolved.note_count, songs[song].tick_rate,
+        if (afx_c_compile_zones(songs[song].resolved.notes, songs[song].resolved.note_count, songs[song].rate,
                                 zones, zone_count, &out)) goto failed;
         if (out.afb_bytes < AFX_BANK_HEADER_BYTES || out.afb_bytes - AFX_BANK_HEADER_BYTES > AFX_ASSET_MAX) {
             afx_c_output_free(&out); goto failed;

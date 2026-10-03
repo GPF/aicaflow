@@ -160,8 +160,8 @@ static int parse_track(const uint8_t *data, uint32_t bytes, uint32_t offset, uin
 }
 
 static uint32_t control_tick(uint32_t tick, const source_event_t *events, uint32_t count,
-                             uint32_t division, uint32_t rate) {
-    uint64_t elapsed = 0, denominator = (uint64_t)division * 1000000u;
+                             uint32_t division, afx_c_tick_rate_t rate) {
+    uint64_t elapsed = 0, denominator = (uint64_t)division * 1000000u * rate.den;
     uint32_t tempo = 500000, cursor = 0;
     for (uint32_t i = 0; i < count; ++i) if (events[i].kind == CSEQ_TEMPO) {
         if (events[i].tick > tick) break;
@@ -169,19 +169,19 @@ static uint32_t control_tick(uint32_t tick, const source_event_t *events, uint32
         cursor = events[i].tick; tempo = events[i].value;
     }
     elapsed += (uint64_t)(tick - cursor) * tempo;
-    uint64_t scaled = elapsed * rate;
+    uint64_t scaled = elapsed * rate.num;
     return (uint32_t)((2u * scaled + denominator) / (2u * denominator));
 }
 
 int afx_c_n64_cseq_notes(const uint8_t *sequence, uint32_t bytes, int sequence_index,
-                         uint32_t tick_rate, afx_c_note_t **out_notes,
+                         afx_c_tick_rate_t tick_rate, afx_c_note_t **out_notes,
                          uint32_t *out_count, afx_n64_automation_t **out_automation,
                          uint32_t *out_automation_count, uint32_t *out_duration) {
     const uint8_t *data = sequence; uint32_t length = bytes, division;
     source_event_t *events = NULL; note_node_t *nodes = NULL;
     afx_n64_automation_t *automation = NULL;
     uint32_t event_count = 0, event_capacity = 0, note_count = 0, note_capacity = 0, final_tick = 0;
-    if (!sequence || !bytes || !tick_rate || !out_notes || !out_count || !out_automation ||
+    if (!sequence || !bytes || !tick_rate.num || !tick_rate.den || !out_notes || !out_count || !out_automation ||
         !out_automation_count || !out_duration) return -1;
     *out_notes = NULL; *out_count = 0; *out_automation = NULL; *out_automation_count = 0;
     if (sequence_index >= 0) {

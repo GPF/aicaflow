@@ -12,7 +12,7 @@ static void candidate(uint8_t file[160]) {
     afx_write32(file + 32, 1); afx_write32(file + 36, 1);
     afx_write32(file + 40, 0x12345678); afx_write32(file + 44, 9);
     afx_write32(file + 48, 80); afx_write32(file + 52, 1);
-    afx_write32(file + 64, 1); afx_write32(file + 68, 1000); afx_write32(file + 72, 1);
+    afx_write32(file + 64, 1); afx_write32(file + 68, AFX_TICK_RATE_NUM); afx_write32(file + 72, AFX_TICK_RATE_DEN);
     afx_write32(file + 80, 0); afx_write32(file + 84, 0); afx_write32(file + 88, 64);
     afx_write16(file + 96 + 6, 31);
     file[132] = AFX_OP_NOTE_PL;
@@ -29,7 +29,7 @@ static void test_bank_bound_container(void) {
     assert(header.abi == AFX_FILE_VERSION && header.control_id == 1 &&
            header.bank_id_low == 0x12345678u && header.bank_id_high == 9);
     assert(afx_flow_duration(file, sizeof(file), &ticks, &num, &den) == AFX_OK);
-    assert(!ticks && num == 1000 && den == 1);
+    assert(!ticks && num == AFX_TICK_RATE_NUM && den == AFX_TICK_RATE_DEN);
     afx_write32(file + 4, AFX_ABI_VERSION);
     assert(afx_file_validate(file, sizeof(file), NULL) == AFX_BAD_FORMAT);
     candidate(file); afx_write32(file + 8, 159);

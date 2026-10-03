@@ -509,10 +509,10 @@ int afx_c_visualize(const uint8_t *afx, uint32_t bytes, uint8_t **out_visual, ui
 
 static int assemble_output(const afx_c_zone_t *zones, uint32_t zone_count,
                            const uint8_t *stream, uint32_t stream_bytes,
-                           uint32_t channels, uint32_t tick_rate, int controlled, afx_c_output_t *out) {
+                           uint32_t channels, afx_c_tick_rate_t tick_rate, int controlled, afx_c_output_t *out) {
     uint32_t *offsets = NULL, sample_bytes = 0;
     if (!zones || !zone_count || zone_count > UINT16_MAX || !stream || !stream_bytes ||
-        !channels || channels > AFX_MAX_FLOW_CHANNELS || !tick_rate || !out) return -1;
+        !channels || channels > AFX_MAX_FLOW_CHANNELS || !tick_rate.num || !tick_rate.den || !out) return -1;
     offsets = malloc(zone_count * sizeof(*offsets));
     if (!offsets) goto failed;
     for (uint32_t i = 0; i < zone_count; ++i) {
@@ -574,7 +574,7 @@ sample_known:;
     afx_write32(afx + 24, zone_count * AFX_SETUP_BYTES); afx_write32(afx + 28, stream_bytes); afx_write32(afx + 32, control_id);
     afx_write32(afx + 36, zone_count); afx_write32(afx + 40, bank_id); afx_write32(afx + 44, afx_read32(out->afb + 12));
     afx_write32(afx + 48, AFX_HEADER); afx_write32(afx + 52, zone_count); afx_write32(afx + 64, channels);
-    afx_write32(afx + 68, tick_rate); afx_write32(afx + 72, 1);
+    afx_write32(afx + 68, tick_rate.num); afx_write32(afx + 72, tick_rate.den);
     if (!controlled && (build_seek(out) || afx_c_visualize(out->afx, out->afx_bytes, &out->afv, &out->afv_bytes))) goto failed;
     free(offsets); return 0;
 failed:
@@ -582,9 +582,9 @@ failed:
 }
 
 int afx_c_compile_zones(const afx_c_note_t *input, uint32_t count,
-                        uint32_t tick_rate, const afx_c_zone_t *zones,
+                        afx_c_tick_rate_t tick_rate, const afx_c_zone_t *zones,
                         uint32_t zone_count, afx_c_output_t *out) {
-    if (!out || !input || !count || !tick_rate || !zones || !zone_count || zone_count > UINT16_MAX)
+    if (!out || !input || !count || !tick_rate.num || !tick_rate.den || !zones || !zone_count || zone_count > UINT16_MAX)
         return -1;
     *out = (afx_c_output_t){0};
     afx_c_note_t *notes = malloc(count * sizeof(*notes));
@@ -657,13 +657,13 @@ static int compare_control_event(const void *left, const void *right) {
 }
 
 int afx_c_compile_events(const afx_c_event_t *input, uint32_t count,
-                         uint32_t duration_ticks, uint32_t tick_rate,
+                         uint32_t duration_ticks, afx_c_tick_rate_t tick_rate,
                          const afx_c_zone_t *zones, uint32_t zone_count,
                          afx_c_output_t *out) {
     afx_c_event_t *events = NULL;
     uint8_t *stream = NULL;
     uint32_t cursor = 0, previous = 0, channels = 0, commands = 0, writes = 0;
-    if (!out || !input || !count || !tick_rate || !zones || !zone_count ||
+    if (!out || !input || !count || !tick_rate.num || !tick_rate.den || !zones || !zone_count ||
         count > (UINT32_MAX - 6u) / 49u) return -1;
     *out = (afx_c_output_t){0};
     events = malloc(count * sizeof(*events)); stream = malloc(count * 49u + 6u);
@@ -710,7 +710,7 @@ failed:
 }
 
 int afx_c_compile_sample(const afx_c_note_t *notes, uint32_t count,
-                         uint32_t tick_rate, const afx_c_sample_t *sample,
+                         afx_c_tick_rate_t tick_rate, const afx_c_sample_t *sample,
                          afx_c_output_t *out) {
     if (!sample) return -1;
     const afx_c_zone_t zone = {.sample = *sample, .key_max = 127, .velocity_max = 127};
@@ -718,7 +718,7 @@ int afx_c_compile_sample(const afx_c_note_t *notes, uint32_t count,
 }
 
 int afx_c_compile_sine(const afx_c_note_t *notes, uint32_t count,
-                       uint32_t tick_rate, afx_c_output_t *out) {
+                       afx_c_tick_rate_t tick_rate, afx_c_output_t *out) {
     uint8_t pcm[SINE_FRAMES * 2];
     for (uint32_t i = 0; i < SINE_FRAMES; ++i) {
         int16_t value = (int16_t)(sin(6.28318530717958647692 * i / SINE_FRAMES) * 28000.0);

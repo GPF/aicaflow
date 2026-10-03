@@ -114,9 +114,12 @@ static void loading_progress(const char *label, uint32_t done, uint32_t total) {
     snprintf(line,sizeof(line),"%s %s %u%%",label,bar,total ? (unsigned)((uint64_t)done*100/total) : 0);
     text(28,line);
 }
+/* afx_status_timer_ticks() counts AFX ticks (11025/11 per second), not milliseconds. */
+static uint32_t ticks_to_ms(uint32_t ticks) { return (uint32_t)(((uint64_t)ticks*1000u*AFX_TICK_RATE_DEN+AFX_TICK_RATE_NUM/2u)/AFX_TICK_RATE_NUM); }
+static uint32_t ms_to_ticks(uint32_t ms) { return (uint32_t)(((uint64_t)ms*AFX_TICK_RATE_NUM+500u*AFX_TICK_RATE_DEN)/(1000u*(uint64_t)AFX_TICK_RATE_DEN)); }
 static uint32_t playback_ms(void) {
     uint32_t now=afx_status_timer_ticks();
-    return (int32_t)(now-started)>0 ? now-started : 0;
+    return (int32_t)(now-started)>0 ? ticks_to_ms(now-started) : 0;
 }
 static void spectrum(uint32_t ms) {
     if (!visual || !visual_frames) return;
@@ -576,7 +579,7 @@ static int seek(int seconds) {
     if (!r) r=wait_state(AFX_PAUSED);
     if (!r) r=afx_instance_seek(instance,(uint32_t)((uint64_t)target*tempo_q8_8*rate_num/(256000ull*rate_den)));
     if (!r) r=wait_state(AFX_RUNNING);
-    if (!r) started=afx_status_timer_ticks()-(uint32_t)target;
+    if (!r) started=afx_status_timer_ticks()-ms_to_ticks((uint32_t)target);
     printf("PLAYER SEEK %lld result=%d\n",(long long)target,r);
     return r;
 }
@@ -598,7 +601,7 @@ static int toggle(void) {
     if (paused) {
         r=afx_instance_seek(instance,(uint32_t)((uint64_t)paused_ms*tempo_q8_8*rate_num/(256000ull*rate_den)));
         if (!r) r=wait_state(AFX_RUNNING);
-        if (!r) { started=afx_status_timer_ticks()-paused_ms; paused=false; }
+        if (!r) { started=afx_status_timer_ticks()-ms_to_ticks(paused_ms); paused=false; }
     } else {
         r=afx_instance_pause(instance);
         if (!r) r=wait_state(AFX_PAUSED);

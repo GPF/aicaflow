@@ -23,6 +23,8 @@ from pathlib import Path
 import afx_n64_trace
 
 
+# Historical nominal timebase (research only): the AICA hardware time base is 11025/11 ticks/s
+# (see protocol.h AFX_TICK_RATE_NUM/DEN); 1000/1 output plays ~0.23% fast on hardware.
 TICK_RATE = 1000
 MAX_SCRIPT_STEPS = 200_000
 MAX_BACKWARD_JUMPS = 1
