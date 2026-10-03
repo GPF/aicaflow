@@ -32,6 +32,21 @@ live controls; source controls that its original player ignores remain ignored
 here too.  Python is retained only as a regression comparison, so a historic
 Python bug is never a reason to preserve incorrect source behaviour.
 
+The native SFX lowering has a sanitizer-backed regression check in
+`tools/test/test_afx_n64_sfx.c`, run by `make check`. It covers live-control
+template pitch/level, negative-decay sustain, a finite component in a parked
+chain, source-rate duration, the PCM quality fallback and truncated codebooks.
+The bank merge check also requires unchanged sample payloads. SFX coding and
+rate candidates follow the accepted Python SFX policy; `--merge` only
+deduplicates and relocates, never re-encodes final samples.
+
+The complete 784-sound DKR corpus was also compared with the accepted Python
+SFX generator using the same B1/table input: all 1,371 component NOTEs match
+in start time and playback state, all encoded sample bytes and loop bounds
+match, and KEYOFF/END/PARK timing matches. Each template retains its NOTE's
+pitch/level baseline for live SH4 controls. Bank/control identity hashes are
+bookkeeping and need not match the retired Python writer.
+
 ## Ownership
 
 | Input | Owns |

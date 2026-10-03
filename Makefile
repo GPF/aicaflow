@@ -6,6 +6,7 @@ TOOLS := tuner/server
 C_COMPILER := build/afx_compile
 C_COMPILER_TEST := build/test_afx_compile
 N64_CSEQ_TEST := build/test_afx_n64_cseq
+N64_SFX_TEST := build/test_afx_n64_sfx
 DEMO_ASSETS := build/afx_demo_assets
 BANK_COMPILER := build/afx_bank
 PROFILE_COMPILER := build/afx_profile
@@ -28,10 +29,11 @@ tools:
 		source $(KOS_ENV) && $(MAKE) -C tools/$$tool || exit $$?; \
 	done
 
-check: $(C_COMPILER) $(C_COMPILER_TEST) $(N64_CSEQ_TEST) $(BANK_COMPILER) $(PROFILE_COMPILER) $(VGM_COMPILER)
+check: $(C_COMPILER) $(C_COMPILER_TEST) $(N64_CSEQ_TEST) $(N64_SFX_TEST) $(N64_COMPILER) $(BANK_COMPILER) $(PROFILE_COMPILER) $(VGM_COMPILER)
 	$(MAKE) -C driver smoke
 	./$(C_COMPILER_TEST)
 	./$(N64_CSEQ_TEST)
+	./$(N64_SFX_TEST)
 	python3 tools/test/test_afx_vgm.py
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; \
 	python3 tools/research/make_fixture_midi.py "$$task_tmp/fixture.mid" && \
@@ -45,7 +47,7 @@ check: $(C_COMPILER) $(C_COMPILER_TEST) $(N64_CSEQ_TEST) $(BANK_COMPILER) $(PROF
 	"$$task_tmp/two.afb" "$$task_tmp/two.afx" && mkdir "$$task_tmp/controls" && \
 	./$(BANK_COMPILER) --merge "$$task_tmp/music.afb" "$$task_tmp/controls" "$$task_tmp/one.afx" "$$task_tmp/two.afx" && \
 	driver/build/afx_validate "$$task_tmp/controls/one.afx" && driver/build/afx_validate "$$task_tmp/controls/two.afx" && \
-	python3 -c 'import struct,sys; bank=open(sys.argv[1],"rb").read(); flow=open(sys.argv[2],"rb").read(); assert struct.unpack_from("<2I",bank,8)==struct.unpack_from("<2I",flow,40)' "$$task_tmp/music.afb" "$$task_tmp/controls/one.afx"
+	python3 -c 'import struct,sys; bank,flow,source=(open(p,"rb").read() for p in sys.argv[1:]); assert struct.unpack_from("<2I",bank,8)==struct.unpack_from("<2I",flow,40); assert bank[32:]==source[32:]' "$$task_tmp/music.afb" "$$task_tmp/controls/one.afx" "$$task_tmp/one.afb"
 	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; \
 	python3 tools/research/make_fixture_midi.py "$$task_tmp/fixture.mid" && \
 	./$(C_COMPILER) "$$task_tmp/fixture.mid" --zones tools/test/fixtures/c_fixture.zones \
@@ -90,6 +92,10 @@ $(N64_CSEQ_TEST): tools/author/afx_n64_cseq.c tools/author/afx_n64_cseq.h tools/
 	mkdir -p build
 	clang -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -Idriver/include -Itools/author tools/author/afx_n64_cseq.c tools/test/test_afx_n64_cseq.c -o $@
 
+$(N64_SFX_TEST): tools/test/test_afx_n64_sfx.c $(N64_COMPILER)
+	mkdir -p build
+	clang -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -Idriver/include -Itools/author tools/test/test_afx_n64_sfx.c tools/author/afx_n64_cseq.c tools/author/afx_compile_c.c tools/author/afx_sample_c.c tools/author/afx_ya2beam.c driver/common/codec.c -lm -o $@
+
 $(DEMO_ASSETS): tools/author/afx_demo_assets.c tools/author/afx_compile_c.c tools/author/afx_compile_c.h driver/common/codec.c driver/include/aicaflow/codec.h driver/include/aicaflow/protocol.h
 	mkdir -p build
 	clang -std=c11 -O2 -Wall -Wextra -Werror -Idriver/include tools/author/afx_demo_assets.c tools/author/afx_compile_c.c driver/common/codec.c -lm -o $@
@@ -123,4 +129,4 @@ clean:
 	@for tool in $(TOOLS); do $(MAKE) -C tools/$$tool clean; done
 	$(MAKE) -C driver clean
 	rm -f $(C_COMPILER) $(C_COMPILER_TEST) $(DEMO_ASSETS) $(BANK_COMPILER) $(PROFILE_COMPILER) \
-		$(VGM_COMPILER) $(N64_COMPILER) $(N64_CSEQ_TEST) build/afx_compile_c build/test_afx_compile_c build/afx_bank_c build/afx_profile_c
+		$(VGM_COMPILER) $(N64_COMPILER) $(N64_CSEQ_TEST) $(N64_SFX_TEST) build/afx_compile_c build/test_afx_compile_c build/afx_bank_c build/afx_profile_c
