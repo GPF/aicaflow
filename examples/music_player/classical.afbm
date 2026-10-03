@@ -1,19 +1,40 @@
-# A shared bank assembled from all three scores. Add another `source` before
-# the maps, then point a MIDI program at its desired SF2 preset to combine
-# sound libraries without adding a runtime bank type.
-source piano @PIANO_SOUNDFONT@ @PIANO_CHANNEL@
-source cello @CELLO_SOUNDFONT@ @CELLO_CHANNEL@
+# Each score has its own AFB. Add another `source` before the maps, then point
+# a MIDI program at its desired SF2 preset to combine sound libraries without
+# adding a runtime bank type.
+source piano "@PIANO_SOUNDFONT@" @PIANO_CHANNEL@
+source cello "@CELLO_SOUNDFONT@" @CELLO_CHANNEL@
+source orchestra "@ORCHESTRA_SOUNDFONT@" @ORCHESTRA_CHANNEL@
 
-# map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <format>
-map * 0 0 piano 0 0 auto
-map * 0 42 cello 0 42 auto
+# map <song|*> <midi-bank> <midi-program> <source> <sf2-bank> <sf2-program> <format> [key=value ...]
+map * 0 0 piano 0 0 auto rate=@PIANO_RATE@
+map * 0 42 cello 0 @CELLO_SF2_PROGRAM@ auto rate=@CELLO_RATE@
 
 # Per-work banks make lossless PCM16 affordable. DSP routing belongs in the
 # matching .afp profile, not in this sample-selection map.
-map chopin-op27-no1 0 0 piano 0 0 @PIANO_FORMAT@
-map bach-bwv1007-prelude 0 42 cello 0 42 @CELLO_FORMAT@
-map grieg-mountain-king 0 0 piano 0 0 @PIANO_FORMAT@
+map chopin-op27-no1 0 0 piano 0 0 @PIANO_FORMAT@ rate=@PIANO_RATE@ filter_offset=600 filter=static gain=fluidsynth2 gain_bias=1600
+map bach-bwv1007-prelude 0 42 cello 0 @CELLO_SF2_PROGRAM@ @CELLO_FORMAT@ rate=@CELLO_RATE@ filter_offset=0 filter=static gain=fluidsynth2 gain_bias=1420 direct=3856
+# `auto` retains ADPCM only where its full- and attack-window SNR meet the
+# authoring threshold; otherwise it uses PCM8. This is a per-sample choice.
+map grieg-mountain-king 0 45 orchestra 0 45 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 47 orchestra 0 47 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 48 orchestra 0 48 adpcm rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+# MIDI channel 9 carries the score's percussion part.  Its program number is
+# also 48, but it must select GeneralUser's Orchestral Kit rather than Fast
+# Strings.  This is a source-selection rule, so it belongs in AFBM.
+map grieg-mountain-king 0 48 orchestra 128 48 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856 midi_channel=9
+map grieg-mountain-king 0 56 orchestra 0 56 adpcm rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 57 orchestra 0 57 adpcm rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 58 orchestra 0 58 adpcm rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 60 orchestra 0 60 adpcm rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 70 orchestra 0 70 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 71 orchestra 0 71 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 72 orchestra 0 72 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
+map grieg-mountain-king 0 73 orchestra 0 73 auto rate=@ORCHESTRA_RATE@ filter=envelope filter_offset=600 gain=fluidsynth2 gain_bias=1600 direct=3856
 
-song chopin-op27-no1 ../sources/chopin-op27-no1.mid
-song bach-bwv1007-prelude ../sources/bach-bwv1007-prelude.mid
-song grieg-mountain-king ../sources/grieg-mountain-king.mid
+song chopin-op27-no1 ../sources/chopin-op27-no1.mid 1001 1000
+song bach-bwv1007-prelude ../performance/bach-bwv1007-prelude-performance.mid 1002 1000
+song grieg-mountain-king "@GRIEG_MIDI@" 1002 50
+
+# Matches the approved C35 rendition's deterministic offline expression.  It
+# changes NOTE level and KEYOFF only; no profile or runtime state is involved.
+humanize chopin-op27-no1 20260909 30 8 0

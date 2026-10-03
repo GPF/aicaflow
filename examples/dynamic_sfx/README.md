@@ -8,7 +8,7 @@ its AFX stream before activation. It repeats after a 300 ms pause and alternates
 direction on each slide.
 
 The demo runs until the player exits it: **A** selects the engine loop, **B**
-selects the authored slide sequence, and **START** returns to `dc-load-ip`.
+selects the authored slide sequence, and **START** returns to `kos-load`.
 Only the selected effect is audible.
 
 The analog stick's horizontal axis controls engine pan; its vertical axis controls

@@ -7,4 +7,4 @@
 #define PLAYER_SONG_PROFILE(index) (songs[(index)].dsp ? songs[(index)].dsp : "dry")
 #define PLAYER_DSP_PROGRAM(name, program) afx_dsp_program_preset((program), (name))
 #define PLAYER_LIST_HEADING "AFB + AFX KiB"
-#include "../player.c"
+#include "../../player_framework/music_player.c"

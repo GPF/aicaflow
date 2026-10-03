@@ -1,13 +1,12 @@
 {
   "format": "aicaflow.afp",
-  "version": 3,
-  "base": {
-    "afx_version": 7,
-    "canonical_sha256": "e1f53d7fd9913048599ab7845c6faba280185d8764c2de8d013de01bddea5d9d"
-  },
+  "version": 4,
+  "base": { "afx_version": 7, "canonical_sha256": "9659da67d8a22a0b255008a10b1789b0dd52e4678132bdc0eb84a8a9456943c4" },
   "dsp": { "preset": "room" },
+  "tempo_q8_8": 256,
   "defaults": { "dsp_send": 112 },
   "templates": {},
   "setup_templates": {},
-  "overrides": []
+  "overrides": [],
+  "lanes": []
 }

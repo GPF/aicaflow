@@ -26,8 +26,28 @@ fetch() {
 
 # Bernd Krueger's CC-BY-SA 3.0 performance, mirrored at this pinned commit.
 fetch chopin-op27-no1.mid https://git.kadet.net/PG/AGU/raw/commit/7c2485ce9b75b7e8b2dad16b7a56d949d4aafa0c/dataset/midi/chpn_op27_1.mid da3484a64d3e3196550e34c7cef537cbc56a4917b423af75127a0833af7ccabb
-fetch grieg-mountain-king.mid https://www.mutopiaproject.org/ftp/GriegE/O46/Dans_l_antre_du_roi_de_la_montagne/Dans_l_antre_du_roi_de_la_montagne.mid 0c256a809b5af1faef81b6aad6106088a71d76b12435d5f0775d4ceee60c917e
-fetch GeneralUser.sf2 https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2 f45b6b4a68b6bf3d792fcbb6d7de24dc701a0f89c5900a21ef3aaece993b839a
+fetch grieg-mountain-king-orchestra.mid 'https://midicities.com/ViewGeocitiesSong?fileType=midi&handler=DownloadFileGeocities&token=4775baed-987d-44c4-9de9-403637059e9b' 5eeafac3e502868db9f983f80e4d747ed38b8fd31cc577cadb5a395f78b5e6f4
+# This is the SoftSynth-oriented GeneralUser-GS bank used by the approved
+# pre-C classical rendering. Its simpler modulation programming is the right
+# source for AICA's offline lowering, and the hash pins the exact old tone.
+fetch GeneralUser-GS.sf2 https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/main/GeneralUser-GS.sf2 9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe
+
+# Ethan Winer's original solo cello is royalty-free, including commercial use.
+# Keep the published archive only as a fetch transport; the SF2 hash pins the
+# exact input passed to the native authoring tool.
+cello_zip=$dest/cello_solo.zip
+cello=$dest/cello_solo.sf2
+cello_sha=2297e81c080d5383b21caefd71e5924c9f75c6f0e1b1e518a08686ebe603f596
+if [ ! -f "$cello" ] || [ "$(digest "$cello")" != "$cello_sha" ]; then
+    fetch cello_solo.zip https://ethanwiner.com/cello_solo.zip e130f0cc522cb3ff473b61328c6e8808fc2b71308a0f2009c583bcc6c9b0c0a6
+    unzip -p "$cello_zip" cello_solo.sf2 > "$cello.part"
+    actual=$(digest "$cello.part")
+    [ "$actual" = "$cello_sha" ] || { printf 'cello_solo.sf2: expected %s, got %s\n' "$cello_sha" "$actual" >&2; exit 1; }
+    mv "$cello.part" "$cello"
+    printf 'extracted cello_solo.sf2\n'
+else
+    printf 'verified cello_solo.sf2\n'
+fi
 
 bach_zip=$dest/bach-bwv1007.zip
 bach=$dest/bach-bwv1007-prelude.mid

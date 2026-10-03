@@ -56,7 +56,7 @@
 static afx_asset_t asset;
 static afx_instance_t instance;
 static afx_bank_t player_bank;
-static int selected, playing = -1, loaded = -1;
+static int selected, playing = -1, loaded = -1, pending = -1;
 static bool input_armed, room_cached, test_exit, paused;
 static uint8_t last_ltrigger, last_rtrigger;
 static uint32_t paused_ms;
@@ -70,12 +70,24 @@ static uint8_t *visual_loading_data;
 static size_t visual_loading_size, visual_loading_bytes;
 static uint8_t spectrum_bars[32];
 static uint32_t spectrum_frame = UINT32_MAX;
+static const char *loading_label;
+static uint32_t loading_done, loading_total;
+typedef struct {
+    FILE *file;
+    uint8_t *buffer;
+    afx_asset_t asset;
+    afx_bank_id_t id;
+    uint32_t offset, bytes, queued;
+    bool dma_pending;
+} bank_loader_t;
+static bank_loader_t bank_loader;
 
 enum { SONG_COUNT = sizeof(songs) / sizeof(*songs),
        SONG_ROWS = SONG_COUNT < PLAYER_SONG_ROWS ? SONG_COUNT : PLAYER_SONG_ROWS,
        VISUAL_HEADER_BYTES = 12, VISUAL_BANDS = 32, VISUAL_RATE = 60,
        SPECTRUM_X = 350, SPECTRUM_TOP = 3, SPECTRUM_HEIGHT = 19,
        SPECTRUM_SUBLEVELS = 4, SPECTRUM_DECAY = 5, VISUAL_READ_BYTES = 32768,
+       BANK_DMA_BYTES = 65536,
        TRIGGER_PRESSED = 128 };
 _Static_assert(SONG_COUNT == PLAYER_EXPECTED_SONGS && SONG_ROWS > 0, "playlist layout");
 
@@ -93,10 +105,10 @@ static void progress_bar(char bar[23], uint32_t done, uint32_t total) {
     for (unsigned i=0;i<20;++i) bar[i+1]=i<filled ? '=' : '-';
     bar[21]=']'; bar[22]=0;
 }
-static void loading_progress(uint32_t done, uint32_t total) {
+static void loading_progress(const char *label, uint32_t done, uint32_t total) {
     char bar[23], line[80];
     progress_bar(bar,done,total);
-    snprintf(line,sizeof(line),"%s %u%%",bar,total ? (unsigned)((uint64_t)done*100/total) : 0);
+    snprintf(line,sizeof(line),"%s %s %u%%",label,bar,total ? (unsigned)((uint64_t)done*100/total) : 0);
     text(28,line);
 }
 static uint32_t playback_ms(void) {
@@ -170,14 +182,14 @@ static void render(void *unused) {
     }
 #endif
     text(26, line);
-    unsigned command_ratio = songs[selected].stream_bytes + songs[selected].setup_bytes;
-    command_ratio = command_ratio ? (unsigned)(((uint64_t)songs[selected].command_baseline_bytes * 10 + command_ratio / 2) / command_ratio) : 10;
-    snprintf(line, sizeof(line), "AICA %luK CHNLS %u S %luK/%u STR %luK TPL %luK %u/%lu %u.%ux",
+    uint32_t template_saved = songs[selected].note_count > songs[selected].setup_count ?
+        (songs[selected].note_count - songs[selected].setup_count) * AFX_SETUP_BYTES : 0;
+    snprintf(line, sizeof(line), "AICA %luK CHNLS %u S %luK/%u STR %luK TPL %luK %u/%lu SAV %luK",
              (unsigned long)((songs[selected].bytes + 1023) / 1024), (unsigned)songs[selected].channel_count,
              (unsigned long)((songs[selected].sample_bytes + 1023) / 1024), (unsigned)songs[selected].sample_count,
              (unsigned long)((songs[selected].stream_bytes + 1023) / 1024),
              (unsigned long)((songs[selected].setup_bytes + 1023) / 1024), (unsigned)songs[selected].setup_count,
-             (unsigned long)songs[selected].note_count, command_ratio / 10, command_ratio % 10);
+             (unsigned long)songs[selected].note_count, (unsigned long)((template_saved + 1023) / 1024));
     text(27, line);
     char time[80]="";
     uint32_t ms=0;
@@ -189,7 +201,8 @@ static void render(void *unused) {
     }
     spectrum(ms);
     enj_qfont_color_set(230,230,230);
-    if (visual_loading_data) loading_progress(visual_loading_bytes,visual_loading_size);
+    if (loading_label) loading_progress(loading_label,loading_done,loading_total);
+    else if (visual_loading_data) loading_progress("Loading AFV",visual_loading_bytes,visual_loading_size);
     else text(28, playing >= 0 ? time : message);
     text(29,"UP/DOWN select  A play/pause  B stop  L/R page  LEFT/RIGHT seek 10s");
 }
@@ -214,13 +227,76 @@ static int shared_bank_load(void) {
 #endif
 #ifdef PLAYER_BANKED
 #ifdef PLAYER_SONG_BANK_FILE
-static int song_bank_load(const char *name) {
-    char path[160];
-    snprintf(path,sizeof(path),"/pc/%s",name);
-    int result=afx_bank_load_file(&player_bank,path);
-    if (!result) return result;
-    snprintf(path,sizeof(path),ENJ_CBASEPATH "%s",name);
-    return afx_bank_load_file(&player_bank,path);
+static void bank_load_cancel(void) {
+    if (bank_loader.file) fclose(bank_loader.file);
+    if (bank_loader.asset && !bank_loader.dma_pending) (void)afx_asset_free(bank_loader.asset);
+    free(bank_loader.buffer);
+    bank_loader=(bank_loader_t){0};
+    loading_label=NULL;
+    loading_done=loading_total=0;
+}
+static int bank_load_begin(const char *name) {
+    uint8_t header[AFX_BANK_HEADER_BYTES];
+    FILE *file=open_asset(name);
+    long total;
+    if (!file || fread(header,1,sizeof(header),file)!=sizeof(header) ||
+        fseek(file,0,SEEK_END) || (total=ftell(file))<0 || (uint64_t)total>UINT32_MAX ||
+        (uint32_t)total!=afx_read32(header+24) || afx_read32(header)!=AFX_BANK_MAGIC ||
+        afx_read32(header+4)!=AFX_BANK_VERSION || !afx_read32(header+8) || !afx_read32(header+12) ||
+        afx_read32(header+16)<AFX_BANK_HEADER_BYTES ||
+        (afx_read32(header+16)&(AFX_UPLOAD_ALIGN-1u)) || !afx_read32(header+20) ||
+        !afx_range(afx_read32(header+16),afx_read32(header+20),(uint32_t)total) ||
+        afx_read32(header+20)!=(uint32_t)total-afx_read32(header+16) ||
+        fseek(file,(long)afx_read32(header+16),SEEK_SET)) {
+        if (file) fclose(file);
+        return -AFX_BAD_FORMAT;
+    }
+    uint8_t *buffer=memalign(AFX_UPLOAD_ALIGN,BANK_DMA_BYTES+AFX_UPLOAD_ALIGN);
+    if (!buffer) { fclose(file); return -AFX_NO_HOST_RAM; }
+    afx_asset_t asset=AFX_ASSET_INVALID;
+    int result=afx_sample_bank_stream_begin(afx_read32(header+20),&asset);
+    if (result) { fclose(file); free(buffer); return result; }
+    bank_loader=(bank_loader_t){.file=file,.buffer=buffer,.asset=asset,
+        .id={afx_read32(header+8),afx_read32(header+12)},.bytes=afx_read32(header+20)};
+    loading_label="Loading AFB";
+    loading_total=bank_loader.bytes;
+    loading_done=0;
+    return AFX_OK;
+}
+/* One file read or one DMA completion per video frame keeps the UI responsive
+ * while the large, per-song AFB is transferred to AICA. */
+static int bank_load_step(void) {
+    if (!bank_loader.file) return AFX_OK;
+    int result;
+    if (bank_loader.dma_pending) {
+        bool complete=false;
+        result=afx_sample_bank_stream_dma_poll(bank_loader.asset,&complete);
+        if (result || !complete) return result;
+        bank_loader.offset+=bank_loader.queued;
+        bank_loader.queued=0;
+        bank_loader.dma_pending=false;
+        loading_done=bank_loader.offset;
+    }
+    if (bank_loader.offset==bank_loader.bytes) {
+        result=afx_sample_bank_stream_finish(bank_loader.asset);
+        if (result) return result;
+        fclose(bank_loader.file);
+        player_bank=(afx_bank_t){.asset=bank_loader.asset,.id=bank_loader.id,.bytes=bank_loader.bytes};
+        free(bank_loader.buffer);
+        bank_loader=(bank_loader_t){0};
+        loading_label=NULL;
+        return AFX_OK;
+    }
+    uint32_t bytes=bank_loader.bytes-bank_loader.offset;
+    if (bytes>BANK_DMA_BYTES) bytes=BANK_DMA_BYTES;
+    memset(bank_loader.buffer,0,BANK_DMA_BYTES+AFX_UPLOAD_ALIGN);
+    if (asset_read(bank_loader.buffer,bytes,bank_loader.file)!=bytes || ferror(bank_loader.file))
+        return -AFX_BAD_FORMAT;
+    result=afx_sample_bank_stream_dma_begin(bank_loader.asset,bank_loader.offset,bank_loader.buffer,bytes);
+    if (result) return result;
+    bank_loader.queued=bytes;
+    bank_loader.dma_pending=true;
+    return AFX_OK;
 }
 #endif
 static int bank_control_load(const char *name, afx_asset_t *out) {
@@ -322,6 +398,10 @@ static int stop(void) {
     return 0;
 }
 static int unload(void) {
+#ifdef PLAYER_SONG_BANK_FILE
+    bank_load_cancel();
+#endif
+    pending=-1;
     int r=stop();
     if (r) return r;
     if (asset) {
@@ -438,6 +518,7 @@ static int start(void) {
     return 0;
 }
 static int play(int index) {
+    if (bank_loader.file) return -AFX_BUSY;
     if (index==loaded && asset) {
         int r=stop();
         return r ? r : start();
@@ -448,8 +529,11 @@ static int play(int index) {
     /* Choose DSP RAM before bank allocation. A no-DSP song leaves the full
        arena to its own AFB; a room scene reserves its ring first. */
     if (songs[index].dsp) r=room(songs[index].dsp);
-    if (!r) r=song_bank_load(PLAYER_SONG_BANK_FILE(index));
+    if (!r) r=bank_load_begin(PLAYER_SONG_BANK_FILE(index));
     if (r) return r;
+    pending=index;
+    snprintf(message,sizeof(message),"Loading: %s",songs[index].title);
+    return AFX_OK;
 #endif
     r=bank_control_load(songs[index].file,&asset);
     if (r) {
@@ -459,6 +543,19 @@ static int play(int index) {
         return r;
     }
     loaded=index;
+    return start();
+}
+static int finish_song_load(void) {
+    int r=bank_control_load(songs[pending].file,&asset);
+    if (r) {
+#ifdef PLAYER_SONG_BANK_FILE
+        (void)afx_bank_release(&player_bank);
+#endif
+        pending=-1;
+        return r;
+    }
+    loaded=pending;
+    pending=-1;
     return start();
 }
 
@@ -508,10 +605,7 @@ static int toggle(void) {
     return r;
 }
 #ifdef PLAYER_FRAME_TEST
-#ifndef PLAYER_FRAME_TEST_HEADER
-#error "PLAYER_FRAME_TEST_HEADER is required with PLAYER_FRAME_TEST"
-#endif
-#include PLAYER_FRAME_TEST_HEADER
+#include "tests/frame_test.h"
 #endif
 int main(void) {
     enj_state_init_defaults();
@@ -525,7 +619,7 @@ int main(void) {
 #endif
     if (r) return 1;
 #ifdef PLAYER_FRAME_TEST
-    selected=69;
+    selected=PLAYER_SELFTEST_EXIT_SONG;
     if (play(selected)) return 1;
 #endif
     if (!enj_mode_push(&mode)) { afx_shutdown(); return 1; }
@@ -549,7 +643,7 @@ static void update(void *unused) {
     input_armed=true;
 #endif
     int r=0;
-    if (pad) {
+    if (pad && !bank_loader.file && pending<0) {
         if (!input_armed) {
             input_armed=pad->button.raw==0 && pad->ltrigger<TRIGGER_PRESSED && pad->rtrigger<TRIGGER_PRESSED;
             last_ltrigger=pad->ltrigger;
@@ -569,6 +663,8 @@ static void update(void *unused) {
             else if (pad->button.RIGHT==ENJ_BUTTON_DOWN_THIS_FRAME) r=seek(10);
         }
     } else { input_armed=false; last_ltrigger=last_rtrigger=0; }
+    if (!r && bank_loader.file) r=bank_load_step();
+    if (!r && pending>=0 && !bank_loader.file) r=finish_song_load();
     if (!r && visual_file) load_visual_chunk();
     if (r) { stop(); snprintf(message,sizeof(message),"Could not play/seek (%d). Press A to retry.",r); }
     if (playing>=0) {

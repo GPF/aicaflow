@@ -1,40 +1,12 @@
 {
   "format": "aicaflow.afp",
-  "version": 3,
-  "base": {
-    "afx_version": 7,
-    "canonical_sha256": "30837e1fcc0e45e64d2fb2045fe269e12023eab09c7dfa2bfda4cacac0a7941a"
-  },
-  "dsp": { "preset": "room_warm" },
-  "tempo_q8_8": 220,
-  "defaults": { "dsp_send": 128 },
-  "templates": {
-    "cello-steady": {
-      "label": "Default restrained cello vibrato",
-      "parameters": { "lfo": 19024 }
-    },
-    "phrase-lift": {
-      "label": "Slightly warmer phrase onset",
-      "parameters": { "lfo": 20080, "dsp_send": 120 }
-    },
-    "receding-tail": {
-      "label": "Gentle tail with less room return",
-      "parameters": { "lfo": 19056, "dsp_send": 88 }
-    }
-  },
-  "setup_templates": {
-    "0": "cello-steady",
-    "1": "cello-steady",
-    "2": "cello-steady",
-    "3": "cello-steady",
-    "4": "cello-steady",
-    "5": "cello-steady"
-  },
-  "overrides": [
-    { "event": { "kind": "note", "tick": 0, "ordinal": 0, "channel": 0 }, "template": "phrase-lift" },
-    { "event": { "kind": "note", "tick": 0, "ordinal": 1, "channel": 1 }, "template": "phrase-lift" },
-    { "event": { "kind": "note", "tick": 750, "ordinal": 0, "channel": 0 }, "parameters": { "dsp_send": 0 } },
-    { "event": { "kind": "note", "tick": 3375, "ordinal": 0, "channel": 0 }, "template": "receding-tail" },
-    { "event": { "kind": "note", "tick": 3375, "ordinal": 1, "channel": 1 }, "template": "receding-tail" }
-  ]
+  "version": 4,
+  "base": { "afx_version": 7, "canonical_sha256": "541854d4943c6fae7266f8f31bad5cbce882633738aa55ba740ca82357df5bdd" },
+  "dsp": { "preset": "room_large" },
+  "tempo_q8_8": 256,
+  "defaults": { "dsp_send": 160 },
+  "templates": {},
+  "setup_templates": {},
+  "overrides": [],
+  "lanes": []
 }
