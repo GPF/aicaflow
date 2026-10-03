@@ -20,6 +20,18 @@ the same:
 music-player build is the integration check: it builds the three published
 works without Python and validates every generated asset.
 
+## N64 CSeq authority
+
+For N64 imports, the compact CSeq event stream and the game's original
+`ALCSPlayer`/ALBank semantics are the authority, not the retired Python
+importer.  `afx_n64` applies the DKR player rules directly: initial and
+program-selected instrument pan/volume/bend range, sample pan, CC7 volume,
+CC10 pan, CC91 FX mix and pitch bend.  Changes that affect a live voice become
+ordinary AFX `PATCH`/`PATCH_LEVEL` commands.  The DKR corpus contains no other
+live controls; source controls that its original player ignores remain ignored
+here too.  Python is retained only as a regression comparison, so a historic
+Python bug is never a reason to preserve incorrect source behaviour.
+
 ## Ownership
 
 | Input | Owns |
