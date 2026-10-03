@@ -118,6 +118,7 @@ Aicaflow gba_square2_test: PASS (0)
 
 - **Software**: PASS (builds clean, no warnings)
 - **Hardware**: runs to completion on the console (all phases, 16/16 patches OK, SH-4 submit lateness ≤3 µs). Audio capture, pitch/duty/level measurement and ARM7 apply-time NOT YET MEASURED
+- **Listening (2026-10-03, real hardware, manual run)**: all phases sounded as the log describes. Console log matched the earlier run (16/16 patches OK, `late_us` 0–2, instance stayed PARKED). Subjective only: no capture, so pitch ≤0.1%, duty edges, RMS and ARM7 apply-time are still unmeasured.
 - **ARM7 firmware**: NOT CHANGED
 - **Runtime API changes**: NONE (used existing `afx_instance_patch()`)
 
