@@ -3,8 +3,10 @@
 AICAflow treats AICA RAM as one SH-4-owned arena. The ARM7 firmware reports
 the first usable asset address and the active asset ceiling; it does not
 allocate samples or interpret file formats. All uploads and asset allocations
-are 32-byte aligned. This is required by the upload/DMA path and avoids
-unrepresentable bank-relative sample addresses.
+are 32-byte aligned. This is required by the upload/DMA path; individual AFX
+bytecode instructions are byte-addressed, not 32-byte records. Uploads round
+and zero-pad backing allocations as needed; an AFX file's total byte length
+need not itself be a multiple of 32.
 
 ```mermaid
 flowchart TB
@@ -32,7 +34,8 @@ program with no external delay RAM reserves nothing.
 AFB payloads are one contiguous allocation. The file header stays in SH-4
 memory; only its payload is copied to AICA. AFX images are separate assets and
 their bank-relative sample addresses are relocated once during upload. AFC
-seek indexes remain only in SH-4 RAM. AFV and AFP are offline/player sidecars
+seek indexes remain only in SH-4 RAM; seeking may temporarily stage SH4-prepared
+register states in AICA, not the index table. AFV and AFP are offline/player sidecars
 and never consume AICA RAM.
 
 AICA channel/DSP registers are memory-mapped I/O at `0x00800000`, not part of

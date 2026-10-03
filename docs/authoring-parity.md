@@ -1,8 +1,10 @@
 # C authoring parity
 
-The release authoring path is C.  The retired Python programs in
-`tools/research/` are a behavioural oracle only: they describe accepted
-conversion choices, but are neither invoked by `make` nor required by a user.
+The release asset-authoring path is C. Python programs in `tools/research/`
+describe historic accepted choices and serve as reference/experimental tools.
+Production example asset generation does not invoke them; `make check` does
+run Python reference tests. DKR's application pack/playlist orchestration and
+the tuner client also use Python, without moving synthesis onto the host.
 
 The goal is not byte identity with an arbitrary historic file.  Sample order,
 alignment and valid AFX dictionary packing may differ without changing the
@@ -52,10 +54,11 @@ bookkeeping and need not match the retired Python writer.
 | Input | Owns |
 | --- | --- |
 | MIDI | notes, tempo, pedals and all musical timing |
+| N64/VGM source | source-specific notes, controls and timing; no MIDI round-trip |
 | AFBM | source selection and all MIDI/SF2-to-AICA conversion policy |
-| AFP | offline AICA performance transform: DSP scene, register templates,
-  note overrides and generated PATCH lanes |
-| AFB/AFX/AFC/AFV | generated runtime assets only |
+| AFP | offline register templates, note overrides, PATCH lanes and build-time DSP/tempo choices |
+| AFSFX | application SFX grouping/residency policy; not sample conversion |
+| AFB/AFX/AFC/AFV/AFI | generated assets only |
 
 An AFP never changes an AFB.  In particular, sample format, resampling,
 looping and SF2 lowering are AFBM settings, so a bank is reproducible from its
@@ -92,34 +95,34 @@ Items 3--5 create no ARM7 feature and no runtime profile interpreter.  The C
 authoring tools validate the existing per-tick AFX command/write budgets when
 they emit their patches.
 
-## Delivery order
+## Implemented policy versus remaining limits
 
-- [x] Replace the brittle optional map columns with named AFBM conversion
-  settings.
-- [x] Carry map settings through the C SF2 resolver, including explicit source
-  pan/reverb policy, fixed or SF2 amplitude envelope, direct path, static LFO,
-  loop trimming and safe one-shot tails.
-- [x] Snapshot MIDI controllers and lower supported linear SF2 graph values at
-  NOTE-on under the explicit `modulators=apply|ignore` AFBM policy.
-- [ ] Lower controller automation after NOTE-on (CC1, CC7, CC10, CC11, CC91
-  and CC93) into AFX PATCH commands under an explicit AFBM policy.
-- [x] Add note-selected AFP lanes for deliberate sustained gain/LFO/filter
-  changes. Static defaults and templates remain the compact all-note and
-  family-level form; a lane is deliberately specific to one sounding voice.
-- [x] Export the accepted Bach/Chopin/Grieg performance choices to declarative
-  sources: Bach timing is checked-in MIDI, while Chopin and Grieg sustained
-  expression is checked-in AFP lanes.
-- [ ] Add the semantic comparison harness and capture-test the resulting
-  corpus on hardware.
+Named AFBM conversion settings, static SF2 lowering, supported linear modulator
+snapshots and note-selected AFP PATCH lanes are implemented. Bach's rhythmic
+performance is checked-in MIDI; the retained sustained Chopin expression is
+AFP data. Global defaults and source-setup templates avoid repeating per-note
+settings when they are shared.
+
+General MIDI controller automation after NOTE-on is not yet lowered to PATCH
+under an AFBM policy. This is distinct from native CSeq: its supported live
+controls do produce source-derived PATCH commands. SF2 curved/time-varying
+modulator graphs and a native OoT AudioSeq importer are not claimed here.
+
+`make check` is not an exhaustive historical music/corpus comparison or a
+hardware listening test. The external DKR SFX corpus comparison above was
+performed on extracted inputs; those inputs are not distributed. A complete
+checked-in semantic comparison harness for every historical classical output
+is not currently provided. Do not infer blanket parity from a passing synthetic
+test or from identical file sizes.
 
 ## Migration and proof
 
 The three classical works are the reference corpus.  For each work we retain
-the source MIDI, pinned SoundFont and human-authored AFBM/AFP source.  A test
-compares the generated assets' semantic records with a checked historical
-reference: setups and sample metadata, event stream, control identity,
-sidecar binding and visual timeline.  It intentionally does not compare AFB
-byte offsets or setup dictionary ordering.
+the source MIDI, pinned SoundFont and human-authored AFBM/AFP source. Compare
+semantic records when evaluating a rebuilt historical reference: setups and
+sample metadata, event stream, binding and visual timeline. Packing offsets,
+dictionary order and identity hashes can differ after legitimate relocation;
+they do not on their own prove an audible difference.
 
 Hand-authored historic performance data is exported into AFP templates,
 overrides and lanes.  It is not silently reconstructed from a binary AFX, and

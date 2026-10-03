@@ -26,6 +26,11 @@ For authored music, keep the scene preset and its DSP-send amount in the
 offline `.afp` profile. The profile rewrite puts the send in the derived AFX;
 the player installs the named scene before loading the matching AFB. Neither
 the profile nor an allocator policy is interpreted by ARM7.
+Read `afx_profile describe` during the offline build to record preset/send/
+tempo in player metadata. Merely uploading the profiled AFX does not install
+the program: it only supplies register send values. The standard
+`afx_dsp_scene_program()` reserves 128 KiB for a memory-using program;
+`afx_dsp_scene_program_ring()` selects an explicit supported RBL.
 
 `examples/dsp_demo` is the smallest programmatic example. The enDjinn-based
 `examples/dsp_effects_player` lets a user audition the built-in C presets with

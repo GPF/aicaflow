@@ -1,8 +1,9 @@
 # AICAflow
 
 AICAflow is a Dreamcast audio runtime and native authoring toolkit for the
-Yamaha AICA. Offline tools turn MIDI, PCM or SoundFonts into sample banks and
-timed AICA register flows. On Dreamcast, SH-4 code owns AICA RAM, validation,
+Yamaha AICA. Native C tools turn MIDI/SoundFonts, raw PCM, N64 CSeq/ALBank or
+Sega MultiPCM VGM/VGZ into sample banks and timed AICA register flows.
+On Dreamcast, SH-4 code owns AICA RAM, validation,
 bank binding, flow instances, seeking, live parameter changes and DSP scenes;
 the ARM7 firmware is a bounded executor for already-resolved commands. This
 keeps file parsing, sample selection and expensive policy off the audio CPU.
@@ -29,10 +30,30 @@ The checked-in firmware means this needs no ARM7 compiler. Run `make check` for
 host validation; maintainers with the ARM toolchain run `make firmware-check`
 to reproduce the release image.
 
-`make compiler` builds the native C authoring tools. They emit AFB, AFX, AFC
-and AFV from MIDI plus raw PCM zones or an SF2; `afx_bank` builds one shared
-AFB for a declared list of songs. Python lives only in `tools/research` and
-`tools/test` as optional reference tooling.
+`make compiler` builds the native C authoring tools; see the
+[tool inventory](tools/README.md) and [authoring workflow](docs/authoring.md).
+Examples author their assets without Python. The tuner host client uses Python
+and the developer test suite uses Python reference checks; neither adds a
+Python interpreter to the Dreamcast runtime.
+
+## Files and ownership
+
+| File | Purpose | Used where |
+| --- | --- | --- |
+| `.afb` | Encoded sample bank | Payload in AICA RAM |
+| `.afx` | Timed register commands and reusable note setups | Image in AICA RAM |
+| `.afc` | Optional seek checkpoints | SH4 RAM only |
+| `.afv` | Optional visualizer animation | Player only |
+| `.afi` | Optional binary sample catalog | SH4 code only |
+| `.afbm` | SoundFont/MIDI bank-building map | Offline |
+| `.afp` | Timbre, DSP and performance adjustments | Offline |
+| `.afsfx` | Application-owned SFX grouping/residency map | Offline; current reader in DKR |
+
+Several flows can share one resident bank. A flow always binds to exactly one
+bank; it does not contain samples or look them up by instrument name at runtime.
+An AFP rewrites ordinary AFX commands, not samples. An AFC is not the control
+stream: it is separate SH4-only seeking data. See the
+[format reference](docs/specs/assets.md) for layouts, bindings and limits.
 
 ## Included examples
 
@@ -57,5 +78,8 @@ started, integration, authoring, DSP and tuner guides, plus the normative
 specifications and the [AICA memory layout](docs/memory.md). Asset-specific
 licensing is in [ASSET_LICENSES.md](ASSET_LICENSES.md).
 
-DKR-specific integration, Nintendo 64 importers and other game-derived work
-are intentionally not part of this generic release.
+The reusable CSeq/ALBank and MultiPCM importers are included. DKR's game
+integration, ROM extraction, SFX residency policy and bonus soundtrack player
+live in the DKR repository. Game ROMs, extracted Nintendo/Sega samples and
+soundtracks are not distributed here. OoT's distinct AudioSeq reader remains
+experimental research code, not a supported mode of `afx_n64`.

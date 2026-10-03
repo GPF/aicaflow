@@ -21,7 +21,9 @@ the required bank-relative address and AICA register values.
 | `.afp` | Offline performance/DSP profile | Offline authoring tool |
 | `.afbm` | Editable source map for building a shared AFB | Offline bank builder |
 | `.afi` | Optional binary AFB sample catalog | SH4-side one-shot code |
+| `.afsfx` | Application SFX grouping/residency map | Offline application pack builder |
 
+AFBM, AFP and AFSFX are authoring inputs, not files interpreted by ARM7.
 All binary layouts are little-endian. Fixed headers make the files cheap to
 validate and intentionally leave no alternate container or compatibility
 encoding.
@@ -54,10 +56,42 @@ and size inside that image, control identity, setup count, bound AFB identity,
 relocation table location/count, required channel count, tick-rate numerator and
 denominator, and the work profile. The image offset is 32-byte aligned.
 
+All fields are unsigned 32-bit little-endian words:
+
+| Offset | Field | Meaning |
+| ---: | --- | --- |
+| 0 | magic | `AFX2` |
+| 4 | abi | AFX file version `7`, not firmware IPC ABI |
+| 8 | total_size | Complete file bytes |
+| 12 | flags | Controlled/music/lane flags defined in `protocol.h` |
+| 16 | image_offset | File-relative start of the 32-byte-aligned upload image |
+| 20 | image_size | Upload image bytes |
+| 24 | stream_offset | Image-relative bytecode start |
+| 28 | stream_size | Bytecode bytes, including final END/PARK |
+| 32 | control_id | Nonzero identity of the exact control image |
+| 36 | setup_count | Number of 36-byte register setups |
+| 40, 44 | bank_id_low, bank_id_high | Identity of the sole bound AFB |
+| 48 | relocations_offset | File-relative relocation-table start |
+| 52 | relocation_count | Number of 12-byte relocation records |
+| 56, 60 | reserved0, reserved1 | Zero |
+| 64 | required_channels | Local voice count required by this flow |
+| 68, 72 | tick_rate_num, tick_rate_den | Authored ticks per second = numerator / denominator |
+| 76 | work_profile | Peak burst commands in high 16 bits, register writes in low 16 bits |
+
+The file header and relocation table are SH4 loader data; only the resolved
+image is the persistent AICA flow allocation. Sample-free does not mean
+"contains no sample references": the setups contain format/loop/address words
+which bind to the separate AFB.
+
 Each relocation gives a setup-pair offset, a bank-relative sample offset and
 its byte length. The loader checks it against the AFB payload and resolves the
 address once. The timed stream only contains existing ARM7 bytecode operations;
 AFX has no embedded samples, no sample names and no runtime parser extension.
+Each 12-byte on-disk relocation is `pair_offset`, `sample_offset`,
+`sample_bytes` (three u32 words). `pair_offset` is image-relative and points to
+the setup CONTROL/SAMPLE_LOW pair; `sample_offset` is **AFB-payload-relative**,
+not a sample index or a file offset. The validator in `driver/common/codec.c`
+is authoritative for ranges, flags and work-profile constraints.
 
 `control_id` identifies the exact control image. It changes when an offline
 profile derives a new AFX and lets its AFC sidecar be rejected if stale.
@@ -79,6 +113,40 @@ An AFC begins with exactly 32 bytes:
 The payload is a checkpoint table used only by the SH-4 when a player offers
 seek. Normal playback neither loads nor needs AFC. It is deliberately separate
 so applications without seeking do not carry its SH-4 memory cost.
+The AFC file is never uploaded as an AICA asset. The SH4 loader validates the header and
+retains the checkpoint payload; it does not retain the header as checkpoint
+data. A player's "AFC KiB" file-size label can include that 32-byte header and
+round up to KiB, so it is not a measurement of the live AICA allocation.
+
+### Checkpoint payload
+
+The payload begins with four u32 words: magic `CKP1`, checkpoint version `1`,
+entry count, and reserved zero. Entries follow consecutively, without a
+secondary chunk container. Each starts with four u32 words:
+
+| Entry-relative offset | Meaning |
+| ---: | --- |
+| 0 | Authored checkpoint tick |
+| 4 | Image-relative stream position |
+| 8 | Authored ticks remaining until the next due stream operation |
+| 12 | Active channel-state count |
+
+Each channel state is 40 bytes: u32 local-channel number, followed by the 18
+u16 register fields in AFX field order. Sample addresses remain bank-relative
+in the file. The normal C emitter records checkpoints at 1000-authored-tick
+intervals. This is about one second at 1000 Hz, not a fixed wall-clock interval
+for every authored rate or runtime tempo.
+
+SH4 selects the preceding checkpoint, replays ordinary events to the target,
+resolves bank addresses and sends prepared register states via REBUILD. That
+operation can use temporary AICA staging memory; it does **not** load the AFC
+table into AICA or make ARM7 interpret it. Checkpoints describe register/timeline
+state, not a saved PCM decoder cursor, sample waveform or DSP delay-ring image;
+seeking is musical reconstruction, not bit-exact sample-phase restoration.
+
+A changed AFP currently emits a valid initial-only checkpoint instead of
+retaining the base table's spacing. This reduces AFC file size but can increase
+SH4 seek replay work. An empty register transform retains the AFC byte-for-byte.
 
 ## AFV — visualisation sidecar
 
@@ -89,6 +157,10 @@ authored level and a short visual decay, normalized across the piece's actual
 pitch range. It is deliberately an inexpensive musical-energy animation, not a
 PCM FFT or a measurement of the final DSP mix. A player may omit AFV with no
 effect on audio playback or seeking.
+The exact 12-byte header is `magic[4]`, `version:u8=1`, `bands:u8=32`,
+`rate:u8=60`, `reserved:u8=0`, `frames:u32`. It is followed by `frames * bands`
+bytes in frame-major order. Regenerate it after an AFP changes expression;
+an old visual sidecar can animate even when the corresponding sound is silent.
 
 ## AFP — performance profile
 
@@ -155,6 +227,9 @@ tempo, `128` is half speed and `512` is double speed. The SH4 sends that
 existing instance-tempo value when it activates the flow, so it changes neither
 the AFX command stream nor the individual NOTE/KEYOFF offsets. It is useful for
 choosing an overall performance pace, not for rhythmic humanisation.
+The offline build reads `afx_profile describe` into player/application
+metadata. The preset name and tempo are not embedded as a runtime profile in
+AFX; merely uploading the derived AFX does not install DSP or set that speed.
 
 Supported preset names are `dry`, `room`, `room_warm` and `room_large`. A dry
 preset with empty defaults is a useful byte-identical profile: applying it
@@ -337,3 +412,15 @@ The 32-byte named record appends a zero-padded, fixed 16-byte source sample
 name at offset 16. Duplicate AFX setups that refer to the same AFB sample
 produce one AFI record. AFI currently describes direct one-shots: loop points,
 root-key and tuning deliberately remain AFX setup data.
+
+## AFSFX — SFX bank grouping/residency map
+
+An AFSFX declares which source sounds should be packed/preloaded together.
+It does not describe PCM coding, a sample catalog, a DSP program or a control
+stream. The current reader is DKR's `dreamcast/build_aicaflow_sfx.py`; the
+native `afx_n64 --sfx` and `afx_bank --merge` perform conversion and packing.
+Neither the AICAflow runtime nor `afx_bank` parses AFSFX directly.
+
+The reusable role and the exact implemented grammar, ID spaces, outputs and
+limits are in [SFX bank maps](afsfx.md). DKR's `core`/`vehicle` names and
+vehicle masks are application policy, not requirements imposed by AICA.
