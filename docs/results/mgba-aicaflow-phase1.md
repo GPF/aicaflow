@@ -41,10 +41,48 @@ The first version split a round over three wakes (drain, left upload, right uplo
 ~7 underruns/s) while the emulator was fine. Fixed by doing the whole round in one wake. The split-upload idea from the cost
 test is not useful for a higher-priority service thread anyway.
 
+## Deterministic A/B: state hash and PMU (added after the first results)
+Same mGBADC revision `32890b7dd` for both backends, interpreter (`MGBA_SH4_DYNAREC=OFF`), software video, `DangerousXmas.gba`.
+
+**State hash (cold-boot trail, project's own `tools/dc-coldboot` method):** built with `MGBA_DC_REPLAY_HARNESS/TRAIL`, hash every 8
+frames over 480 frames from reset. Four hardware runs (KOS x2, AICAflow x2): all four produce **60 identical trail lines, and all are
+identical to the checked-in baseline `tools/dc-coldboot/dxmas-f480-e8.trail`**. The transport swap leaves emulated state unchanged
+over that workload. Speed per 120-frame window was also very repeatable: KOS 25.5 / 23.1 / 30.7 fps, AICAflow 27.4 / 24.3 / 33.9
+(+7%, +5%, +11%); repeats differ by < 0.2 fps.
+
+**PMU campaign (`docs/NATIVE_AUDIO_PMU_CAMPAIGN.md` method):** checkpoint `checkpoint-audio-dxmas-s2.state` + `input-audio-dxmas-s2.bin`
+(staged under unique names), 120 warm-up frames then three 1,200-frame passes (cycles/instructions, I-cache, D-cache), audio ON and
+`audioSync` ON, three clean hardware runs per backend (one KOS run was voided because the controller exit chord was used mid-run, and
+re-run). Counters are system level (both frontend threads and interrupts included). Per frame:
+
+| metric (mean of 3) | KOS snd_stream | AICAflow ring | AICAflow vs KOS |
+|---|---|---|---|
+| elapsed (3,600 frames) | 244.84 s | 234.45 s | -4.25% |
+| fps | 14.70 | 15.36 | +4.44% |
+| CPU cycles | 11,098,244 | 10,568,471 | **-4.77%** |
+| instructions | 4,840,836 | 4,892,237 | +1.06% |
+| I-cache misses | 209,262 | 152,063 | -27.3% |
+| I-cache freeze cycles | 4,958,000 | 3,986,535 | -19.6% |
+| D-cache misses | 68,176 | 94,529 | +38.7% |
+| D-cache freeze cycles | 2,572,878 | 3,099,124 | +20.5% |
+
+Run-to-run spread within a backend is < 0.02% on every counter, so the differences are systematic for this workload. The net saving
+(~0.53 M cycles/frame) is a larger I-cache saving (-0.97 M freeze cycles) partly offset by more D-cache stalls (+0.53 M). Causes are
+NOT established; plausible but unverified: the KOS stream path's extra thread/ARM7 traffic touches more code, and the AICAflow path
+copies through host staging buffers.
+
+**Ring health over the 235 s PMU runs (3 runs):** 5,062 rounds each (21.5/s), 0 late refills, 0 underruns, 0 generation / upload /
+instance errors, minimum margin 1165-1171 frames, lateness <= 883 frames; service busy 4.9-5.7% of wall (cursor 0.46%, drain ~2.2%,
+upload ~2.95%). The scene supplied only ~534 of 2,048 samples per round on average (about 26% of real-time audio), so 99.9% of rounds
+were zero-padded, exactly as the KOS callback does.
+
+**Caveat to keep front and center:** with audio production at 26-43% of real time, the ring mostly transports zeros. This proves
+integration correctness, scheduling stability and cost under real mGBA load, NOT sustained full-rate audio delivery.
+
 ## Not established
-- State/replay hash and cycle (PMU) comparison on the deterministic replay workload; `audioSync` pacing could in principle
-  change emulation timing. fps windows here are scene-dependent, not deterministic.
-- Behaviour when the emulator is at/above real time (all runs were producer-starved), long soak, pause/resume/reset/state load.
-- The test-tone diagnostic, a dynarec build, SuperMarioAdvance1, and a line-out capture.
-- Nothing is pushed: the submodule pin `8007dba` exists only in the local aicaflow clone, so the mGBADC branch is not
-  reproducible elsewhere until aicaflow is pushed.
+- Behaviour when the emulator is at or above real time (every run so far was producer-starved), the dynarec build, SuperMarioAdvance1.
+- Pause / resume / reset / state load, a long soak, the `MGBA_DC_AUDIO_AICAFLOW_TEST_TONE` diagnostic, line-out capture.
+- Why the AICAflow path costs fewer cycles (needs a targeted measurement, e.g. the `BREAKDOWN`/`DCACHE_SCOPE` scopes, which this
+  backend does not implement).
+- Nothing about mGBADC is pushed (its remote is another user's repository); aicaflow `main` is pushed and the submodule pin
+  `8007dba` is reachable on it.
