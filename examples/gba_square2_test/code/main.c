@@ -35,6 +35,14 @@
 #include <stdalign.h>
 #include <string.h>
 
+/* KOS timer_us_gettime64() runs 0.25% slow and steps +2.5 ms once per second
+ * (TMU2 ticks are 80.2 ns, not 80 ns; see docs/results/aica-ring-mode-a.md). */
+#define TMU2_TICKS_PER_SEC 12468720.0
+static inline uint64_t now_us(void) {
+    timer_val_t v = __dreamcast_get_ticks();
+    return (uint64_t)v.secs * 1000000u + (uint64_t)((double)v.ticks * (1000000.0 / TMU2_TICKS_PER_SEC));
+}
+
 /* ── GBA Square 2 duty table (from mGBADC/src/gb/audio.c) ─────────────── */
 
 static const int gba_duty[4][8] = {
@@ -127,7 +135,7 @@ static int build_flow(const afx_bank_t *bank, int pattern, uint16_t pitch,
     fields[AFX_FIELD_LOOP_END] = WAVE_FRAMES + GUARD_FRAMES - 5;  /* = 7, as dynamic_sfx */
     fields[AFX_FIELD_ENV_AD] = 0x001f;
     fields[AFX_FIELD_ENV_DR] = 0x001f;
-    fields[AFX_FIELD_DIRECT] = 0x0f00u | 15u;     /* centre pan */
+    fields[AFX_FIELD_DIRECT] = 0x0f00u;           /* pan 0 = centre (15 is a hard pan) */
     fields[AFX_FIELD_MIX] = 0x0024;
     for (unsigned f = AFX_FIELD_FILTER_LEVEL0; f <= AFX_FIELD_FILTER_LEVEL4; ++f)
         fields[f] = 0x1fff;
@@ -249,17 +257,17 @@ int main(int argc, char **argv) {
         if (!result) result = wait_for(inst, AFX_PARKED, 1000);
         /* GBA envelope step = 1/64 s (period 1).  Deadlines are absolute so
          * sleep jitter does not accumulate; log requested vs actual submit. */
-        uint64_t t0 = timer_us_gettime64();
+        uint64_t t0 = now_us();
         for (int step = 0; step < 16 && !result; step++) {
             uint64_t due = t0 + (uint64_t)step * 1000000u / 64u;
             /* thd_sleep(1) is a ~10 ms scheduler tick, so only sleep when the
              * deadline is well past one tick away; busy-wait the remainder. */
-            for (uint64_t now; (now = timer_us_gettime64()) < due; ) {
+            for (uint64_t now; (now = now_us()) < due; ) {
                 if (due - now > 12000) thd_sleep(1);
             }
             uint8_t level = (uint8_t)(15 - step);
             uint16_t mix = mix_for_level(level);
-            uint64_t sent = timer_us_gettime64();
+            uint64_t sent = now_us();
             int pr = afx_instance_patch(inst, 0, 1u << AFX_FIELD_MIX, &mix);
             afx_update();
             afx_instance_status_t st = {0};

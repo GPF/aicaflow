@@ -32,6 +32,14 @@
 #include <stdalign.h>
 #include <string.h>
 
+/* KOS timer_us_gettime64() runs 0.25% slow and steps +2.5 ms once per second
+ * (TMU2 ticks are 80.2 ns, not 80 ns; see docs/results/aica-ring-mode-a.md). */
+#define TMU2_TICKS_PER_SEC 12468720.0
+static inline uint64_t now_us(void) {
+    timer_val_t v = __dreamcast_get_ticks();
+    return (uint64_t)v.secs * 1000000u + (uint64_t)((double)v.ticks * (1000000.0 / TMU2_TICKS_PER_SEC));
+}
+
 #define AICA_REG_SH4        0xa0700000u
 #define MON_SELECT_ADDR     (AICA_REG_SH4 + 0x280du)
 #define MON_POS_ADDR        (AICA_REG_SH4 + 0x2814u)
@@ -88,7 +96,7 @@ static int build_flow(const afx_bank_t *bank, uint16_t pitch, uint16_t mix, afx_
     fields[AFX_FIELD_LOOP_END] = WAVE_FRAMES - 1;      /* frames + guards - 5 */
     fields[AFX_FIELD_ENV_AD] = 0x001f;
     fields[AFX_FIELD_ENV_DR] = 0x001f;
-    fields[AFX_FIELD_DIRECT] = 0x0f00u | 15u;
+    fields[AFX_FIELD_DIRECT] = 0x0f00u;           /* pan 0 = centre (15 is a hard pan) */
     fields[AFX_FIELD_MIX] = 0x0024;
     for (unsigned f = AFX_FIELD_FILTER_LEVEL0; f <= AFX_FIELD_FILTER_LEVEL4; ++f)
         fields[f] = 0x1fff;
@@ -187,10 +195,10 @@ static uint32_t cursor_read(unsigned channel) {
 
 /* Measured rate (samples/ms) of what the monitor reports after selecting `channel`. */
 static double scan_rate(int mode, unsigned delay_us, unsigned channel) {
-    uint64_t ta = timer_us_gettime64();
+    uint64_t ta = now_us();
     uint32_t a = cursor_read_with(mode, delay_us, channel);
     timer_spin_delay_us(4000);
-    uint64_t tb = timer_us_gettime64();
+    uint64_t tb = now_us();
     uint32_t b = cursor_read_with(mode, delay_us, channel);
     uint32_t d = b >= a ? b - a : b + WAVE_FRAMES - a;
     return (double)d * 1000.0 / (double)(tb - ta);
@@ -258,11 +266,11 @@ int main(int argc, char **argv) {
         g2_ctx_t ctx = g2_lock();
         select_channel(m, 3);
         timer_spin_delay_us(2000);
-        uint64_t ts = timer_us_gettime64();
+        uint64_t ts = now_us();
         select_channel(m, 0);
         for (int k = 0; k < 14; k++) {
             v[k] = g2_read_32(MON_POS_ADDR) & 0xffffu;
-            at[k] = (uint32_t)(timer_us_gettime64() - ts);
+            at[k] = (uint32_t)(now_us() - ts);
             timer_spin_delay_us(4);
         }
         g2_unlock(ctx);
@@ -303,7 +311,7 @@ int main(int argc, char **argv) {
         } else printf("SCAN_BEST none (no mode selects channels correctly)\n");
     }
 
-    uint64_t t0 = timer_us_gettime64(), t_prev = t0;
+    uint64_t t0 = now_us(), t_prev = t0;
     uint32_t prev = cursor_read(ch);
     uint32_t polls = 0, advancing = 0, run_const = 0, max_const = 0, wraps = 0, oor = 0,
              max_pos = prev, skipped = 0, ctl_same = 0, ctl_changes = 0, bad_state = 0,
@@ -313,13 +321,13 @@ int main(int argc, char **argv) {
     uint16_t mix_now = MIX_LOUD;
 
     printf("CURSOR t_ms=0 ch=%u pos=%lu delta=0\n", ch, (unsigned long)prev);
-    while ((timer_us_gettime64() - t0) < (uint64_t)RUN_MS * 1000u) {
+    while ((now_us() - t0) < (uint64_t)RUN_MS * 1000u) {
         thd_sleep(POLL_MS);
         afx_update();
         afx_instance_status_t st = {0};
         if (afx_instance_status(inst, &st) || st.state != AFX_PARKED) bad_state++;
 
-        uint64_t now = timer_us_gettime64();
+        uint64_t now = now_us();
         uint32_t pos = cursor_read(ch);
         uint32_t cpos = cursor_read(ctl);
         uint64_t dt = now - t_prev;

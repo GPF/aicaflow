@@ -165,4 +165,10 @@ the cost is one ~50 µs spin per cursor read.
 CURSOR PROBE READY FOR PCM REFILL EXPERIMENT
 
 ## Errata (KOS timer, found later)
-`timer_us_gettime64()` in KOS runs 0.25% slow and steps forward ~2.5 ms once per real second (TMU2 ticks are converted at 80 ns but are really 80.2 ns; see `aica-ring-mode-a.md`). The cursor-vs-wall-time rates in this document (44.113 and 88.227 samples/ms) were computed with that timer, so they carry that error; the conclusions (select method, settle time, usable cursor) are unaffected. Also the example sets `DIRECT = 0x0f00 | 15`, which pans hard to one side (heard in the right ear only); centre is 0.
+`timer_us_gettime64()` in KOS runs 0.25% slow and steps forward ~2.5 ms once per real second
+(TMU2 ticks are converted at 80 ns but are really 80.2 ns; see `aica-ring-mode-a.md`). The
+rates above (44.113 and 88.227 samples/ms) were computed with it. **Fixed afterwards:** the example
+now uses a corrected clock and re-ran on hardware with identical results (rate 44.113, ref
+88.227, all 7 checks pass), because the slow slope and the 1 Hz step cancel over whole seconds;
+the remaining +0.03% is therefore a real AICA-vs-SH-4 clock difference, not the artifact.
+The example's pan was also corrected (`DIRECT = 0x0f00`; `0x0f00 | 15` is a hard pan).
